@@ -18,13 +18,26 @@ from monitor.config import (
 )
 
 import urllib3
-from monitor.client import (
-  TrendSeries,
-  get_os_client
-  )
 
-
+from dataclasses import dataclass
 from monitor.utils import is_realtime_timeframe, timeframe_to_minutes, timeframe_to_prometheus_range
+
+@dataclass
+class TrendSeries:
+    """Normalized time-series payload used by historical trend views."""
+
+    label: str
+    values: list[float]
+    timestamps: list[int]
+    unit: str
+
+    @property
+    def peak(self) -> float:
+        return max(self.values) if self.values else 0.0
+
+    @property
+    def latest(self) -> float:
+        return self.values[-1] if self.values else 0.0
 
 
 class MetricsProvider:
@@ -87,8 +100,8 @@ class MetricsProvider:
             ),
             "indexing_rate": self.fetch_prometheus_series(
                 label="Indexing Rate",
-                query="rate(opensearch_indices_indexing_index_count[5m])",
-                fallback_query="rate(opensearch_indices_indexing_index_total[5m])",
+                query="sum(rate(opensearch_indices_indexing_index_total[5m]))",
+                fallback_query="sum(rate(opensearch_indices_indexing_index_count[5m]))",
                 timeframe=effective_tf,
                 unit="ops/s",
             ),
@@ -138,6 +151,9 @@ class MetricsProvider:
         }
 
     def _fetch_node_stats_from_opensearch(self) -> dict[str, Any]:
+        # Local import avoids module-load circular dependency with monitor.client.
+        from monitor.client import get_os_client
+
         client = get_os_client()
         return client.nodes.stats(metric="os,jvm,fs,indices")
 
@@ -313,3 +329,17 @@ _METRICS_PROVIDER = MetricsProvider()
 def get_metrics_provider() -> MetricsProvider:
     """Return the shared metrics provider instance."""
     return _METRICS_PROVIDER
+
+
+
+def fetch_historical_trends(timeframe: str) -> dict[str, TrendSeries]:
+    """Fetch Prometheus-backed historical trend series for OpenSearch metrics."""
+    try:
+        return get_metrics_provider().fetch_historical_trends(timeframe=timeframe)
+    except Exception as e:
+        console.print(f"[red]Error fetching historical trends:[/red] {e}")
+        return {
+            "cpu": TrendSeries(label="CPU", values=[], timestamps=[], unit="%"),
+            "heap": TrendSeries(label="JVM Heap", values=[], timestamps=[], unit="bytes"),
+            "indexing_rate": TrendSeries(label="Indexing Rate", values=[], timestamps=[], unit="ops/s"),
+        }

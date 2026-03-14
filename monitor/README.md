@@ -256,4 +256,5 @@ monitor/
 Historical Trends currently uses these Prometheus metric names:
 - `opensearch_jvm_mem_heap_used_bytes`
 - `opensearch_os_cpu_percent`
-- `opensearch_indices_indexing_index_total`
+- `opensearch_indices_indexing_index_total` (primary, summed rate)
+- `opensearch_indices_indexing_index_count` (fallback when `_total` is absent)

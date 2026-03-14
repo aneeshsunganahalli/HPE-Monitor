@@ -7,7 +7,7 @@ and returns structured Python dicts/lists so views never touch raw HTTP.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+
 from typing import Any
 
 import urllib3
@@ -23,26 +23,6 @@ from monitor.config import (
 )
 from monitor.metrics_service import get_metrics_provider
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-
-@dataclass
-class TrendSeries:
-    """Normalized time-series payload used by historical trend views."""
-
-    label: str
-    values: list[float]
-    timestamps: list[int]
-    unit: str
-
-    @property
-    def peak(self) -> float:
-        return max(self.values) if self.values else 0.0
-
-    @property
-    def latest(self) -> float:
-        return self.values[-1] if self.values else 0.0
-
-
 
 
 
@@ -139,18 +119,6 @@ def fetch_data_streams() -> dict:
         console.print(f"[red]Error fetching data streams:[/red] {e}")
         return {}
 
-
-def fetch_historical_trends(timeframe: str) -> dict[str, TrendSeries]:
-    """Fetch Prometheus-backed historical trend series for OpenSearch metrics."""
-    try:
-        return get_metrics_provider().fetch_historical_trends(timeframe=timeframe)
-    except Exception as e:
-        console.print(f"[red]Error fetching historical trends:[/red] {e}")
-        return {
-            "cpu": TrendSeries(label="CPU", values=[], timestamps=[], unit="%"),
-            "heap": TrendSeries(label="JVM Heap", values=[], timestamps=[], unit="bytes"),
-            "indexing_rate": TrendSeries(label="Indexing Rate", values=[], timestamps=[], unit="ops/s"),
-        }
 
 
 def fetch_bottleneck_metrics(node_name: str) -> dict[str, float | None]:

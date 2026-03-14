@@ -10,11 +10,17 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from monitor.client import TrendSeries, fetch_historical_trends
 from monitor.config import CPU_WARN, CPU_CRIT, console
+from monitor.metrics_service import TrendSeries, fetch_historical_trends
 from monitor.utils import format_bytes, is_realtime_timeframe, timeframe_to_prometheus_range
 
 _SPARK_BLOCKS = " ▁▂▃▄▅▆▇█"
+_DEFAULT_SPARK_WIDTH = 68
+_METRIC_COLORS = {
+    "cpu": "bright_yellow",
+    "heap": "bright_green",
+    "indexing_rate": "bright_cyan",
+}
 
 
 def _downsample(values: list[float], width: int) -> list[float]:
@@ -49,6 +55,13 @@ def _sparkline(values: list[float], width: int = 42) -> str:
     return "".join(blocks)
 
 
+def _sparkline_width() -> int:
+    """Pick a wider chart width that adapts to terminal size."""
+    # Reserve room for table borders and side columns while maximizing trend width.
+    terminal_width = getattr(console, "width", 120) or 120
+    return max(56, min(_DEFAULT_SPARK_WIDTH, terminal_width - 58))
+
+
 def _format_metric_value(series: TrendSeries, value: float) -> str:
     """Format metric values by unit."""
     if series.unit == "%":
@@ -56,8 +69,31 @@ def _format_metric_value(series: TrendSeries, value: float) -> str:
     if series.unit == "bytes":
         return format_bytes(value)
     if series.unit == "ops/s":
-        return f"{value:.2f}/s"
+        if value >= 100:
+            return f"{value:.0f}/s"
+        if value >= 10:
+            return f"{value:.1f}/s"
+        if value >= 1:
+            return f"{value:.2f}/s"
+        if value > 0:
+            return f"{value:.4f}/s"
+        return "0/s"
     return f"{value:.2f}"
+
+
+def _trend_cell(metric_key: str, series: TrendSeries, width: int) -> str:
+    """Render a larger sparkline plus min/max labels for easier scanning."""
+    if not series.values:
+        return "[dim]no data[/dim]"
+
+    spark = _sparkline(series.values, width=width)
+    color = _METRIC_COLORS.get(metric_key, "white")
+    floor = _format_metric_value(series, min(series.values))
+    peak = _format_metric_value(series, max(series.values))
+    return (
+        f"[{color}]{spark}[/{color}]\n"
+        f"[dim]min {floor}  |  max {peak}[/dim]"
+    )
 
 
 def _metric_readout(metric_key: str, series: TrendSeries) -> str:
@@ -132,17 +168,20 @@ def display_trends(timeframe: str = "1h"):
     console.print()
 
     # Drill-down detail
+    spark_width = _sparkline_width()
     table = Table(
         box=box.ROUNDED,
         show_header=True,
+        show_lines=True,
         header_style="bold cyan",
+        padding=(1, 1),
         expand=True,
     )
-    table.add_column("Metric", style="bold white", width=14)
-    table.add_column("Trend", ratio=2)
+    table.add_column("Metric", style="bold white", width=16)
+    table.add_column("Trend (Historical)", ratio=4)
     table.add_column("Latest", width=12, justify="right")
     table.add_column("Peak", width=12, justify="right")
-    table.add_column("Readout", ratio=3)
+    table.add_column("Readout", ratio=2)
 
     for metric_key, series in (
         ("cpu", cpu_series),
@@ -153,7 +192,7 @@ def display_trends(timeframe: str = "1h"):
         peak = _format_metric_value(series, series.peak) if series.values else "—"
         table.add_row(
             series.label,
-            _sparkline(series.values),
+            _trend_cell(metric_key, series, width=spark_width),
             latest,
             peak,
             _metric_readout(metric_key, series),
