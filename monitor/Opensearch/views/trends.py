@@ -18,10 +18,11 @@ _BAR_CHAR = "█"
 _EMPTY_CHAR = " "
 _DEFAULT_CHART_WIDTH = 60
 _DEFAULT_CHART_HEIGHT = 10
+_GRAPH_COLOR = "bright_cyan"
 _METRIC_COLORS = {
-    "cpu": "bright_yellow",
-    "heap": "bright_green",
-    "indexing_rate": "bright_cyan",
+    "cpu": _GRAPH_COLOR,
+    "heap": _GRAPH_COLOR,
+    "indexing_rate": _GRAPH_COLOR,
 }
 
 

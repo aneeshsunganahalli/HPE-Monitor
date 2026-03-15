@@ -117,12 +117,32 @@ class MetricsProvider:
         fallback_query: str | None = None,
     ) -> TrendSeries:
         """Run a Prometheus range query and collapse multiple series into one line."""
-        payload = self._prometheus_query_range(query=query, timeframe=timeframe, step=step)
-        timestamps, values = self._collapse_prometheus_result(payload)
+        payload, start, end, step_seconds = self._prometheus_query_range(
+            query=query,
+            timeframe=timeframe,
+            step=step,
+        )
+        has_primary_samples = self._has_prometheus_samples(payload)
+        timestamps, values = self._collapse_prometheus_result(
+            payload,
+            start=start,
+            end=end,
+            step_seconds=step_seconds,
+        )
 
-        if not values and fallback_query:
-            payload = self._prometheus_query_range(query=fallback_query, timeframe=timeframe, step=step)
-            timestamps, values = self._collapse_prometheus_result(payload)
+        # Preserve backwards compatibility for environments exposing alternate indexing counters.
+        if fallback_query and not has_primary_samples:
+            payload, start, end, step_seconds = self._prometheus_query_range(
+                query=fallback_query,
+                timeframe=timeframe,
+                step=step,
+            )
+            timestamps, values = self._collapse_prometheus_result(
+                payload,
+                start=start,
+                end=end,
+                step_seconds=step_seconds,
+            )
 
         return TrendSeries(label=label, values=values, timestamps=timestamps, unit=unit)
 
@@ -157,10 +177,11 @@ class MetricsProvider:
         client = get_os_client()
         return client.nodes.stats(metric="os,jvm,fs,indices")
 
-    def _prometheus_query_range(self, query: str, timeframe: str, step: str) -> dict[str, Any]:
+    def _prometheus_query_range(self, query: str, timeframe: str, step: str) -> tuple[dict[str, Any], int, int, int]:
         minutes = max(timeframe_to_minutes(timeframe), 5)
         now = int(time.time())
         start = now - (minutes * 60)
+        step_seconds = self._step_to_seconds(step)
 
         # Keep a valid range string around for downstream logging/debugging.
         _ = timeframe_to_prometheus_range(timeframe)
@@ -177,17 +198,63 @@ class MetricsProvider:
             timeout_seconds=PROMETHEUS_TIMEOUT_SECONDS,
             warn_context="prometheus query_range",
         )
-        return payload
+        return payload, start, now, step_seconds
 
     @staticmethod
-    def _collapse_prometheus_result(payload: dict[str, Any]) -> tuple[list[int], list[float]]:
-        """Collapse multiple result series into a single max-per-timestamp line."""
+    def _step_to_seconds(step: str) -> int:
+        """Convert Prometheus step values (e.g., '5m') into seconds."""
+        m = re.fullmatch(r"\s*(\d+)\s*([smhd])\s*", step.strip().lower())
+        if not m:
+            return 300
+
+        value = int(m.group(1))
+        unit = m.group(2)
+        multipliers = {
+            "s": 1,
+            "m": 60,
+            "h": 3600,
+            "d": 86400,
+        }
+        return max(1, value * multipliers.get(unit, 60))
+
+    @staticmethod
+    def _has_prometheus_samples(payload: dict[str, Any]) -> bool:
+        """Return True when Prometheus matrix results include at least one datapoint."""
+        if payload.get("status") != "success":
+            return False
+
+        results = payload.get("data", {}).get("result", [])
+        if not isinstance(results, list):
+            return False
+
+        for series in results:
+            if isinstance(series, dict) and isinstance(series.get("values"), list) and series.get("values"):
+                return True
+        return False
+
+    @staticmethod
+    def _collapse_prometheus_result(
+        payload: dict[str, Any],
+        start: int,
+        end: int,
+        step_seconds: int,
+    ) -> tuple[list[int], list[float]]:
+        """Collapse series into a max-per-timestamp line and zero-fill missing buckets."""
         if payload.get("status") != "success":
             return [], []
 
         results = payload.get("data", {}).get("result", [])
-        if not isinstance(results, list) or not results:
+        if not isinstance(results, list):
             return [], []
+
+        if start > end:
+            return [], []
+
+        expected_timestamps = list(range(start, end + 1, max(1, step_seconds)))
+        if not expected_timestamps:
+            expected_timestamps = [start]
+
+        expected_set = set(expected_timestamps)
 
         by_timestamp: dict[int, list[float]] = {}
         for series in results:
@@ -200,14 +267,19 @@ class MetricsProvider:
                 if value is None:
                     continue
                 ts = int(float(ts_raw))
+
+                # Query results can drift by a second due to evaluation timing; snap to nearest bucket.
+                if ts not in expected_set:
+                    offset = round((ts - start) / max(1, step_seconds))
+                    snapped = start + (offset * step_seconds)
+                    if snapped < start or snapped > end:
+                        continue
+                    ts = snapped
+
                 by_timestamp.setdefault(ts, []).append(value)
 
-        if not by_timestamp:
-            return [], []
-
-        timestamps = sorted(by_timestamp)
-        collapsed = [max(by_timestamp[ts]) for ts in timestamps]
-        return timestamps, collapsed
+        collapsed = [max(by_timestamp.get(ts, [0.0])) for ts in expected_timestamps]
+        return expected_timestamps, collapsed
 
     def _request_json(
         self,
