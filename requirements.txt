@@ -4,3 +4,4 @@ click>=8.1.0
 urllib3>=1.26.0
 simple-term-menu>=1.6.0
 python-dotenv==1.2.2
+psutil>=5.9.0
