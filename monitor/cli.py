@@ -46,7 +46,23 @@ from monitor.utils import press_enter_to_return
     default=None,
     help="Service to monitor. Omit to see the service selector menu.",
 )
-def cli(timeframe, watch, summary, service):
+@click.option(
+    "--query",
+    default="*",
+    help="Query string for log search. Use with Log Browser.",
+)
+@click.option(
+    "--level",
+    type=click.Choice(["error", "warn", "info", "debug", "critical"], case_sensitive=False),
+    default=None,
+    help="Log level filter.",
+)
+@click.option(
+    "--spike-ts",
+    default=None,
+    help="ISO timestamp for Root Cause Analysis (e.g., 2026-03-20T10:00:00).",
+)
+def cli(timeframe, watch, summary, service, query, level, spike_ts):
     """OpenSearch Cluster Monitor — a terminal-based health checker."""
 
     # Validate --timeframe format (real-time or number + m/h/d)
@@ -102,20 +118,27 @@ def cli(timeframe, watch, summary, service):
         if choice is None:
             return
 
-        _, view_fn = OPENSEARCH_VIEWS[choice]
-        _watch_loop(view_fn, watch, timeframe=timeframe)
+        label, view_fn = OPENSEARCH_VIEWS[choice]
+        # Prepare watch arguments
+        watch_args = {"timeframe": timeframe}
+        if label == "Log Browser":
+            watch_args.update({"query_str": query, "level": level})
+        elif label == "Root Cause Analysis":
+            watch_args = {"spike_ts": spike_ts}
+
+        _watch_loop(view_fn, watch, **watch_args)
         return
 
     # Default routing:
     #   --service opensearch   → go directly to the OpenSearch menu
     #   no --service flag      → show the top-level service selector
     if service == "opensearch":
-        opensearch_menu(timeframe=timeframe)
+        opensearch_menu(timeframe=timeframe, query=query, level=level, spike_ts=spike_ts)
     else:
-        main_service_menu(timeframe=timeframe)
+        main_service_menu(timeframe=timeframe, query=query, level=level, spike_ts=spike_ts)
 
 
-def _watch_loop(view_fn, interval: int, timeframe: str):
+def _watch_loop(view_fn, interval: int, **kwargs):
     """
     Watch mode: clear → render view → show timestamp → sleep → repeat.
     Catches KeyboardInterrupt for clean exit.
@@ -123,7 +146,7 @@ def _watch_loop(view_fn, interval: int, timeframe: str):
     try:
         while True:
             console.clear()
-            view_fn(timeframe=timeframe)
+            view_fn(**kwargs)
             now = datetime.datetime.now().strftime("%H:%M:%S")
             console.print(
                 f"\n[dim]Last updated: {now} — refreshing in {interval}s  "

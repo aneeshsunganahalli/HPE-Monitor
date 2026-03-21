@@ -19,11 +19,11 @@ from monitor.config import (
     OPENSEARCH_USER,
     OPENSEARCH_PASS,
     OPENSEARCH_SSL,
+    OPENSEARCH_INDEX,
     console,
 )
 from monitor.metrics_service import get_metrics_provider
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 
 
 def get_os_client() -> OpenSearch:
@@ -37,6 +37,9 @@ def get_os_client() -> OpenSearch:
         ssl_assert_hostname=False,
         ssl_show_warn=False,
         scheme=scheme,
+        timeout=30,
+        max_retries=2,
+        retry_on_timeout=True,
     )
 
 
@@ -129,5 +132,110 @@ def fetch_bottleneck_metrics(node_name: str) -> dict[str, float | None]:
         console.print(f"[yellow]Unable to fetch diagnostics for '{node_name}':[/yellow] {e}")
         return {
             "disk_utilization": None,
-            "io_tot_wait": None,
+            "os_memory_utilization": None,
         }
+
+
+def search_logs(query_str: str = "*", minutes: int = 30, size: int = 20, level: str = None) -> list:
+    """Search for logs using query string and filters."""
+    must = [
+        {
+            "query_string": {
+                "query": query_str,
+                "analyze_wildcard": False
+            }
+        },
+        {"range": {"@timestamp": {"gte": f"now-{minutes}m", "lte": "now"}}}
+    ]
+    if level:
+        must.append({"match": {"log.level": level.lower()}})
+
+    body = {
+        "size": size,
+        "timeout": "20s",
+        "sort": [{"@timestamp": {"order": "desc"}}],
+        "query": {"bool": {"must": must}},
+        "_source": ["@timestamp", "message", "log.level", "hostname", "instance", "program"]
+    }
+    try:
+        client = get_os_client()
+        return client.search(index=OPENSEARCH_INDEX, body=body)["hits"]["hits"]
+    except Exception as e:
+        console.print(f"[red]Error searching logs:[/red] {e}")
+        return []
+
+
+def fetch_error_summary(minutes: int = 60) -> list:
+    """Fetch aggregation of errors and warnings by host."""
+    body = {
+        "size": 0,
+        "timeout": "20s",
+        "query": {
+            "bool": {
+                "must": [
+                    {"range": {"@timestamp": {"gte": f"now-{minutes}m", "lte": "now"}}},
+                    {"terms": {"log.level": ["error", "warn", "warning", "critical"]}}
+                ]
+            }
+        },
+        "aggs": {
+            "by_host": {
+                "terms": {"field": "hostname.keyword", "size": 10},
+                "aggs": {
+                    "by_level": {"terms": {"field": "log.level.keyword", "size": 5}}
+                }
+            }
+        }
+    }
+    try:
+        client = get_os_client()
+        res = client.search(index=OPENSEARCH_INDEX, body=body)
+        return res.get("aggregations", {}).get("by_host", {}).get("buckets", [])
+    except Exception as e:
+        console.print(f"[red]Error fetching error summary:[/red] {e}")
+        return []
+
+
+def fetch_log_rate(minutes: int = 60, interval: str = "5m") -> list:
+    """Fetch log rate distribution over time."""
+    body = {
+        "size": 0,
+        "timeout": "20s",
+        "query": {"range": {"@timestamp": {"gte": f"now-{minutes}m", "lte": "now"}}},
+        "aggs": {
+            "over_time": {
+                "date_histogram": {
+                    "field": "@timestamp",
+                    "fixed_interval": interval,
+                    "min_doc_count": 0
+                },
+                "aggs": {
+                    "by_level": {"terms": {"field": "log.level.keyword", "size": 5}}
+                }
+            }
+        }
+    }
+    try:
+        client = get_os_client()
+        res = client.search(index=OPENSEARCH_INDEX, body=body)
+        return res.get("aggregations", {}).get("over_time", {}).get("buckets", [])
+    except Exception as e:
+        console.print(f"[red]Error fetching log rate:[/red] {e}")
+        return []
+
+
+def fetch_logs_for_spike(start: str, end: str, size: int = 100) -> list:
+    """Fetch logs within a specific time range for RCA."""
+    body = {
+        "size": size,
+        "timeout": "20s",
+        "sort": [{"@timestamp": {"order": "asc"}}],
+        "query": {"range": {"@timestamp": {"gte": start, "lte": end}}},
+        "_source": ["@timestamp", "message", "log.level", "hostname", "program"]
+    }
+    try:
+        client = get_os_client()
+        return client.search(index=OPENSEARCH_INDEX, body=body)["hits"]["hits"]
+    except Exception as e:
+        console.print(f"[red]Error fetching logs for spike:[/red] {e}")
+        return []

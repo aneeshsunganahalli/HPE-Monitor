@@ -66,5 +66,48 @@ DISK_WARN = 80
 DISK_CRIT = 90
 # ───────────────────────────────────────────────────────────────
 
+# ──────────────── Log Configuration ────────────────────────────
+OPENSEARCH_INDEX = os.getenv("OPENSEARCH_INDEX", "system-logs-*")
+
+# Log colors for UI consistency
+LOG_COLORS = {
+    "error": "red",
+    "critical": "bold red",
+    "warn": "yellow",
+    "warning": "yellow",
+    "info": "cyan",
+    "debug": "dim",
+}
+
+# ──────────────── Analysis Patterns ────────────────────────────
+# Keyword tags for anomaly interpretation
+KEYWORD_TAGS = {
+    "CPU": ["cpu", "merge", "aggregat", "lucene"],
+    "HEAP": ["heap", "memory", "outofmemory", "oom"],
+    "GC": ["gc", "garbage", "pause", "overhead"],
+    "DISK": ["disk", "watermark", "flood", "space", "read-only", "readonly"],
+    "THREAD": ["rejected", "queue", "bulk", "thread pool"],
+    "SEARCH": ["timeout", "slowlog", "slow", "circuit"],
+}
+
+# Diagnostic labels for root cause analysis
+ROOT_CAUSE_PATTERNS = [
+    ("OutOfMemoryError", "🔴 JVM OOM — heap exhausted"),
+    ("GC overhead limit", "🟠 GC overhead — excessive garbage collection"),
+    ("disk usage exceeded", "🔴 Disk full / watermark breached"),
+    ("circuit_breaking_exception", "🟠 Circuit breaker tripped — memory pressure"),
+    ("flood stage", "🔴 Disk flood-stage — index set read-only"),
+    ("high disk watermark", "🟡 High disk watermark crossed"),
+    ("rejected execution", "🟠 Thread pool rejection — queue full"),
+    ("bulk rejected", "🟠 Bulk indexing rejected — backpressure"),
+    ("timeout", "🟡 Operation timeout"),
+    ("failed to obtain", "🟡 Lock/resource contention"),
+    ("connection refused", "🟡 Downstream connection refused"),
+    ("shard failed", "🔴 Shard failure"),
+    ("unassigned", "🟡 Unassigned shards detected"),
+    ("slowlog", "🟡 Slow query/index detected"),
+]
+# ───────────────────────────────────────────────────────────────
+
 # Shared console instance
 console = Console()

@@ -18,6 +18,8 @@ from monitor.Opensearch.views.index_deep_dive import display_index_deep_dive
 from monitor.Opensearch.views.node_performance import display_node_performance
 from monitor.Opensearch.views.shard_overview import display_shard_overview
 from monitor.Opensearch.views.data_streams import display_data_streams
+from monitor.Opensearch.views.log_browser import display_log_browser
+from monitor.Opensearch.views.root_cause import display_root_cause_analysis
 from monitor.utils import press_enter_to_return
 
 
@@ -41,7 +43,7 @@ SERVICE_OPTIONS = [
 ]
 
 
-def main_service_menu(timeframe: str = "1h"):
+def main_service_menu(timeframe: str = "1h", query: str = "*", level: str = None, spike_ts: str = None):
     """Show the top-level service selector and loop until exit."""
     while True:
         console.clear()
@@ -65,7 +67,7 @@ def main_service_menu(timeframe: str = "1h"):
             console.print("[bold green]Goodbye![/bold green]")
             sys.exit(0)
         elif choice == 0:
-            opensearch_menu(timeframe=timeframe)
+            opensearch_menu(timeframe=timeframe, query=query, level=level, spike_ts=spike_ts)
         elif choice in (2, 3, 4):
             console.print("\n[yellow]⚠  This service is coming soon.[/yellow]")
             press_enter_to_return()
@@ -80,11 +82,13 @@ OPENSEARCH_VIEWS = [
     ("Index Deep Dive", display_index_deep_dive),
     ("Node Performance", display_node_performance),
     ("Shard Overview",  display_shard_overview),
+    ("Log Browser",     display_log_browser),
+    ("Root Cause Analysis", display_root_cause_analysis),
     ("Data Streams",    display_data_streams),
 ]
 
 
-def opensearch_menu(timeframe: str = "1h"):
+def opensearch_menu(timeframe: str = "1h", query: str = "*", level: str = None, spike_ts: str = None):
     """Show the OpenSearch monitoring submenu and loop until back."""
     while True:
         console.clear()
@@ -120,10 +124,16 @@ def opensearch_menu(timeframe: str = "1h"):
 
         # View selection
         if choice < len(OPENSEARCH_VIEWS):
-            _, view_fn = OPENSEARCH_VIEWS[choice]
+            label, view_fn = OPENSEARCH_VIEWS[choice]
             console.clear()
             try:
-                view_fn(timeframe=timeframe)
+                # Pass extra context to specific views
+                if label == "Log Browser":
+                    view_fn(timeframe=timeframe, query_str=query, level=level)
+                elif label == "Root Cause Analysis":
+                    view_fn(spike_ts=spike_ts)
+                else:
+                    view_fn(timeframe=timeframe)
             except Exception as e:
                 console.print(f"\n[red]Error:[/red] {e}")
             press_enter_to_return()
