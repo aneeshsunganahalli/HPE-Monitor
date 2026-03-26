@@ -16,6 +16,7 @@ import re
 import click
 
 from monitor.config import console
+from monitor.metrics_service import get_metrics_provider
 from monitor.menus import main_service_menu, opensearch_menu
 from monitor.Opensearch.views.quick_summary import display_quick_summary
 from monitor.utils import press_enter_to_return
@@ -27,6 +28,12 @@ from monitor.utils import press_enter_to_return
     default="1h",
     show_default=True,
     help="Time window for metric routing (real-time, 30m, 6h, 2d). Default: 1h.",
+)
+@click.option(
+    "--source",
+    type=click.Choice(["auto", "poller", "prometheus"], case_sensitive=False),
+    default=None,
+    help="Historical trend source: auto (default), poller, or prometheus.",
 )
 @click.option(
     "--watch",
@@ -62,7 +69,7 @@ from monitor.utils import press_enter_to_return
     default=None,
     help="ISO timestamp for Root Cause Analysis (e.g., 2026-03-20T10:00:00).",
 )
-def cli(timeframe, watch, summary, service, query, level, spike_ts):
+def cli(timeframe, source, watch, summary, service, query, level, spike_ts):
     """OpenSearch Cluster Monitor — a terminal-based health checker."""
 
     # Validate --timeframe format (real-time or number + m/h/d)
@@ -74,6 +81,9 @@ def cli(timeframe, watch, summary, service, query, level, spike_ts):
             param_hint="'--timeframe'",
         )
     timeframe = timeframe.lower()
+
+    if source:
+        get_metrics_provider().set_history_source_preference(source)
 
     # Handle coming-soon services
     if service in ("kafka", "logstash"):

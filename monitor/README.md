@@ -26,8 +26,12 @@ python -m monitor --summary
 # Auto-refresh every 10 seconds
 python -m monitor --summary --watch 10
 
-# Historical trend window (Prometheus)
+# Historical trend window (poller JSONL with Prometheus fallback)
 python -m monitor --timeframe 6h
+
+# Force historical trend source to poller or Prometheus API
+python -m monitor --source poller
+python -m monitor --source prometheus
 
 # Force real-time node metrics
 python -m monitor --timeframe real-time
@@ -38,6 +42,7 @@ python -m monitor --timeframe real-time
 | Flag          | Values                                   | Default | Description                                |
 |---------------|------------------------------------------|---------|--------------------------------------------|
 | `--timeframe` | `real-time`, `30m`, `1h`, `6h`, `4d`    | `1h`    | Routes metric source by time window        |
+| `--source` | `auto`, `poller`, `prometheus`     | `auto`  | Historical trend backend selection         |
 | `--service`   | `opensearch`                             | —       | Skip service menu, go direct to OpenSearch |
 | `--summary`   | flag                                     | off     | Jump straight to Quick Summary             |
 | `--watch`     | integer (seconds)                        | off     | Auto-refresh interval                      |
@@ -45,7 +50,7 @@ python -m monitor --timeframe real-time
 ## Views
 
 1. **Quick Summary** — 10-second health check: cluster status, resources (CPU / JVM Heap / RAM / Disk), index activity, shard status
-2. **Historical Trends** — 5-minute `max_over_time` buckets for CPU, JVM Heap, and Indexing Rate from Prometheus
+2. **Historical Trends** — 5-minute buckets for CPU, JVM Heap, and Indexing Rate from poller JSONL (`poller/data`), with Prometheus fallback when poller data is unavailable
 3. **Cluster Health** — Detailed cluster status with plain English explanations
 4. **Index Deep Dive** — All indices sorted by size, drill into shard layouts
 5. **Node Performance** — Per-node CPU, JVM heap, RAM, disk + indexing/search counters + bottleneck diagnostics
@@ -65,6 +70,9 @@ OPENSEARCH_SSL  = False
 
 PROMETHEUS_HOST = "localhost"
 PROMETHEUS_PORT = 9090
+
+POLLER_DATA_DIR = "poller/data"
+HISTORICAL_METRICS_SOURCE = "auto"  # auto | poller | prometheus
 
 PA_HOST = "localhost"
 PA_PORT = 9600
@@ -146,7 +154,7 @@ Per-node breakdown of CPU, JVM heap, OS memory, disk (exact bytes via `fs.total`
 ### `GET /api/v1/query_range` (Prometheus)
 
 **Function:** `fetch_historical_trends(timeframe)` via `MetricsProvider`
-**Used in:** Historical Trends, long-window routing (`--timeframe > 1h`)
+**Used in:** Historical Trends fallback path, long-window routing (`--timeframe > 1h`)
 
 Executes PromQL queries for 5-minute-bucket trend lines (`max_over_time`) and collapses multi-node series into a cluster-wide spike line.
 
@@ -241,7 +249,7 @@ monitor/
 └── Opensearch/
     └── views/
         ├── quick_summary.py      # View 1 — cluster-wide health check
-        ├── trends.py             # View 2 — historical Prometheus trends
+        ├── trends.py             # View 2 — historical trends (poller-first, Prometheus fallback)
         ├── cluster_health.py     # View 3 — detailed health + shard counts
         ├── index_deep_dive.py    # View 4 — index table + shard drill-down
         ├── node_performance.py   # View 5 — per-node CPU / heap / disk / ops + diagnostics
@@ -251,7 +259,16 @@ monitor/
 
 ---
 
-## Prometheus Metrics Used
+## Historical Trend Sources
+
+Historical Trends first reads poller JSONL snapshots from `poller/data` (or `POLLER_DATA_DIR`) and aggregates 5-minute buckets for:
+- `cpu_pct` (max bucket value)
+- `heap_used_bytes` (max bucket value)
+- `index_total` (converted to per-second indexing rate)
+
+When poller history is unavailable, it falls back to Prometheus queries.
+
+## Prometheus Metrics Used (Fallback)
 
 Historical Trends currently uses these Prometheus metric names:
 - `opensearch_jvm_mem_heap_used_bytes`

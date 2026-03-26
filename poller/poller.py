@@ -184,6 +184,8 @@ def run(
                     "disk_store_bytes":     snap["disk_store_bytes"],
                     "disk_total_bytes":     snap["disk_total_bytes"],
                     "disk_pct":             snap["disk_pct"],
+                    # Cumulative indexing counter (used to derive indexing rate trends)
+                    "index_total":          snap.get("index_total", 0),
                     # GC pause rate (ms of GC per second of wall time)
                     "gc_pause_rate_ms_per_s": gc_rate,
                     # Thread pool (current queue depth + rejected rate)

@@ -6,7 +6,7 @@ import urllib.parse
 from typing import Any
 
 from monitor.config import (
-  PROMETHEUS_HOST,
+    PROMETHEUS_HOST,
     PROMETHEUS_PORT,
     PROMETHEUS_SCHEME,
     PROMETHEUS_TIMEOUT_SECONDS,
@@ -14,12 +14,15 @@ from monitor.config import (
     PA_PORT,
     PA_SCHEME,
     PA_TIMEOUT_SECONDS,
-    console
+    POLLER_DATA_DIR,
+    HISTORICAL_METRICS_SOURCE,
+    console,
 )
 
 import urllib3
 
 from dataclasses import dataclass
+from monitor.poller_history import PollerHistoryStore
 from monitor.utils import is_realtime_timeframe, timeframe_to_minutes, timeframe_to_prometheus_range
 
 @dataclass
@@ -47,7 +50,16 @@ class MetricsProvider:
         self._http = urllib3.PoolManager()
         self._prometheus_base = f"{PROMETHEUS_SCHEME}://{PROMETHEUS_HOST}:{PROMETHEUS_PORT}"
         self._pa_base = f"{PA_SCHEME}://{PA_HOST}:{PA_PORT}"
+        self._poller_history = PollerHistoryStore(POLLER_DATA_DIR)
+        self._history_source_preference = HISTORICAL_METRICS_SOURCE
         self._warned_contexts: set[str] = set()
+
+    def set_history_source_preference(self, source: str) -> None:
+        """Set historical trend source preference (`auto`, `poller`, `prometheus`)."""
+        normalized = (source or "").strip().lower()
+        if normalized not in {"auto", "poller", "prometheus"}:
+            normalized = "auto"
+        self._history_source_preference = normalized
 
     def route_source(self, timeframe: str, historical: bool = False) -> str:
         """
@@ -83,29 +95,107 @@ class MetricsProvider:
         return self._fetch_node_stats_from_opensearch()
 
     def fetch_historical_trends(self, timeframe: str) -> dict[str, TrendSeries]:
-        """Fetch 5-minute bucketed max_over_time trend lines from Prometheus."""
+        """Fetch historical trends using poller JSONL first, then Prometheus fallback."""
+        _source, trends = self.fetch_historical_trends_with_source(timeframe=timeframe)
+        return trends
+
+    def fetch_historical_trends_with_source(self, timeframe: str) -> tuple[str, dict[str, TrendSeries]]:
+        """Return historical trends and the backend source used (poller/prometheus/mixed)."""
         effective_tf = "1h" if is_realtime_timeframe(timeframe) else timeframe
-        return {
-            "cpu": self.fetch_prometheus_series(
-                label="CPU",
-                query="max_over_time(opensearch_os_cpu_percent[5m])",
-                timeframe=effective_tf,
-                unit="%",
-            ),
-            "heap": self.fetch_prometheus_series(
-                label="JVM Heap",
-                query="max_over_time(opensearch_jvm_mem_heap_used_bytes[5m])",
-                timeframe=effective_tf,
-                unit="bytes",
-            ),
-            "indexing_rate": self.fetch_prometheus_series(
-                label="Indexing Rate",
-                query="sum(rate(opensearch_indices_indexing_index_total[5m]))",
-                fallback_query="sum(rate(opensearch_indices_indexing_index_count[5m]))",
-                timeframe=effective_tf,
-                unit="ops/s",
-            ),
-        }
+
+        def _build_poller_series() -> dict[str, TrendSeries]:
+            timeframe_minutes = max(timeframe_to_minutes(effective_tf), 5)
+            poller_trends = self._poller_history.fetch_historical_trends(timeframe_minutes=timeframe_minutes)
+
+            poller_cpu_ts, poller_cpu_values = poller_trends.get("cpu", ([], []))
+            poller_heap_ts, poller_heap_values = poller_trends.get("heap", ([], []))
+            poller_index_ts, poller_index_values = poller_trends.get("indexing_rate", ([], []))
+
+            return {
+                "cpu": TrendSeries(
+                    label="CPU",
+                    values=poller_cpu_values,
+                    timestamps=poller_cpu_ts,
+                    unit="%",
+                ),
+                "heap": TrendSeries(
+                    label="JVM Heap",
+                    values=poller_heap_values,
+                    timestamps=poller_heap_ts,
+                    unit="bytes",
+                ),
+                "indexing_rate": TrendSeries(
+                    label="Indexing Rate",
+                    values=poller_index_values,
+                    timestamps=poller_index_ts,
+                    unit="ops/s",
+                ),
+            }
+
+        def _build_prometheus_series() -> dict[str, TrendSeries]:
+            return {
+                "cpu": self.fetch_prometheus_series(
+                    label="CPU",
+                    query="max_over_time(opensearch_os_cpu_percent[5m])",
+                    timeframe=effective_tf,
+                    unit="%",
+                ),
+                "heap": self.fetch_prometheus_series(
+                    label="JVM Heap",
+                    query="max_over_time(opensearch_jvm_mem_heap_used_bytes[5m])",
+                    timeframe=effective_tf,
+                    unit="bytes",
+                ),
+                "indexing_rate": self.fetch_prometheus_series(
+                    label="Indexing Rate",
+                    query="sum(rate(opensearch_indices_indexing_index_total[5m]))",
+                    fallback_query="sum(rate(opensearch_indices_indexing_index_count[5m]))",
+                    timeframe=effective_tf,
+                    unit="ops/s",
+                ),
+            }
+
+        preferred_source = self._history_source_preference
+
+        if preferred_source == "poller":
+            poller_series = _build_poller_series()
+            if any(series.values for series in poller_series.values()):
+                return "poller", poller_series
+            return "none", poller_series
+
+        if preferred_source == "prometheus":
+            prometheus_series = _build_prometheus_series()
+            if any(series.values for series in prometheus_series.values()):
+                return "prometheus", prometheus_series
+            return "none", prometheus_series
+
+        poller_series = _build_poller_series()
+        prometheus_series = _build_prometheus_series()
+
+        merged: dict[str, TrendSeries] = {}
+        poller_used = False
+        prometheus_used = False
+
+        for key in ("cpu", "heap", "indexing_rate"):
+            candidate = poller_series[key]
+            if candidate.values:
+                merged[key] = candidate
+                poller_used = True
+            else:
+                merged[key] = prometheus_series[key]
+                if prometheus_series[key].values:
+                    prometheus_used = True
+
+        if poller_used and prometheus_used:
+            source = "mixed"
+        elif poller_used:
+            source = "poller"
+        elif any(series.values for series in merged.values()):
+            source = "prometheus"
+        else:
+            source = "none"
+
+        return source, merged
 
     def fetch_prometheus_series(
         self,
@@ -405,12 +495,25 @@ def get_metrics_provider() -> MetricsProvider:
 
 
 def fetch_historical_trends(timeframe: str) -> dict[str, TrendSeries]:
-    """Fetch Prometheus-backed historical trend series for OpenSearch metrics."""
+    """Fetch historical trend series for OpenSearch metrics."""
     try:
         return get_metrics_provider().fetch_historical_trends(timeframe=timeframe)
     except Exception as e:
         console.print(f"[red]Error fetching historical trends:[/red] {e}")
         return {
+            "cpu": TrendSeries(label="CPU", values=[], timestamps=[], unit="%"),
+            "heap": TrendSeries(label="JVM Heap", values=[], timestamps=[], unit="bytes"),
+            "indexing_rate": TrendSeries(label="Indexing Rate", values=[], timestamps=[], unit="ops/s"),
+        }
+
+
+def fetch_historical_trends_with_source(timeframe: str) -> tuple[str, dict[str, TrendSeries]]:
+    """Fetch historical trends and return which backend source was used."""
+    try:
+        return get_metrics_provider().fetch_historical_trends_with_source(timeframe=timeframe)
+    except Exception as e:
+        console.print(f"[red]Error fetching historical trends:[/red] {e}")
+        return "none", {
             "cpu": TrendSeries(label="CPU", values=[], timestamps=[], unit="%"),
             "heap": TrendSeries(label="JVM Heap", values=[], timestamps=[], unit="bytes"),
             "indexing_rate": TrendSeries(label="Indexing Rate", values=[], timestamps=[], unit="ops/s"),

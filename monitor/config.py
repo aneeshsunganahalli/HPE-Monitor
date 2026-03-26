@@ -30,6 +30,18 @@ def _env_bool(name: str, default: bool) -> bool:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
+
+def _env_choice(name: str, default: str, allowed: set[str]) -> str:
+    """Read a string enum env var and safely fall back when invalid."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+
+    normalized = raw.strip().lower()
+    if normalized in allowed:
+        return normalized
+    return default
+
 # ─────────────────────────── CONFIG ────────────────────────────
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "localhost")
 OPENSEARCH_PORT = _env_int("OPENSEARCH_PORT", 9200)
@@ -46,6 +58,12 @@ PA_HOST = os.getenv("PA_HOST", OPENSEARCH_HOST)
 PA_PORT = _env_int("PA_PORT", 9600)
 PA_SCHEME = os.getenv("PA_SCHEME", "http")
 PA_TIMEOUT_SECONDS = _env_int("PA_TIMEOUT_SECONDS", 4)
+POLLER_DATA_DIR = os.getenv("POLLER_DATA_DIR", "poller/data")
+HISTORICAL_METRICS_SOURCE = _env_choice(
+    "HISTORICAL_METRICS_SOURCE",
+    "auto",
+    {"auto", "poller", "prometheus"},
+)
 # ───────────────────────────────────────────────────────────────
 
 # ─────────────────────── THRESHOLDS ────────────────────────────

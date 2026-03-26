@@ -18,6 +18,7 @@ All metrics are scoped to the OpenSearch process itself — not the host OS:
   tp_write_rejected thread_pool.write.rejected     (cumulative count; caller diffs for rate)
   tp_search_queue   thread_pool.search.queue
   tp_search_rejected thread_pool.search.rejected   (cumulative count; caller diffs for rate)
+    index_total       indices.indexing.index_total   (cumulative; caller diffs for rate)
 """
 
 from __future__ import annotations
@@ -95,6 +96,8 @@ def collect(client) -> dict[str, dict[str, Any]]:
                 "active":   pool_data.get("active",   0),
             }
 
+        index_total = node.get("indices", {}).get("indexing", {}).get("index_total", 0)
+
         results[name] = {
             "cpu_pct":         round(cpu_pct, 2),
             "heap_pct":        round(heap_pct, 2),
@@ -106,6 +109,7 @@ def collect(client) -> dict[str, dict[str, Any]]:
             "gc_young_ms":     gc_young_ms,  
             "gc_old_ms":       gc_old_ms,
             "thread_pool":     thread_pool,
+            "index_total":     index_total,
         }
 
     return results

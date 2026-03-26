@@ -62,7 +62,7 @@ def _fd_metrics(pid: int) -> dict[str, Any]:
     except FileNotFoundError:
         return {}
 
-    soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+    soft_limit = _fd_limit_for_pid(pid)
     fd_pct = (fd_count / soft_limit * 100.0) if soft_limit > 0 else 0.0
 
     return {
@@ -70,6 +70,40 @@ def _fd_metrics(pid: int) -> dict[str, Any]:
         "fd_limit": soft_limit,
         "fd_pct":   round(fd_pct, 2),
     }
+
+
+def _fd_limit_for_pid(pid: int) -> int:
+    """Resolve RLIMIT_NOFILE soft limit for the target PID."""
+    try:
+        process = psutil.Process(pid)
+        soft_limit, _hard_limit = process.rlimit(resource.RLIMIT_NOFILE)
+        if isinstance(soft_limit, int) and soft_limit > 0:
+            return soft_limit
+    except (AttributeError, NotImplementedError, psutil.Error, ValueError):
+        pass
+
+    # /proc/<pid>/limits works even when psutil cannot read rlimit directly.
+    limits_path = f"/proc/{pid}/limits"
+    try:
+        with open(limits_path, encoding="ascii") as fh:
+            for line in fh:
+                if not line.lower().startswith("max open files"):
+                    continue
+                parts = line.split()
+                if len(parts) >= 4:
+                    try:
+                        value = int(parts[3])
+                    except ValueError:
+                        value = 0
+                    if value > 0:
+                        return value
+                break
+    except OSError:
+        pass
+
+    # Last-resort fallback: current process limit.
+    soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+    return int(soft_limit) if soft_limit > 0 else 0
 
 
 def _io_metrics(pid: int) -> dict[str, Any]:

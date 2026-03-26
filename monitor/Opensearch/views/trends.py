@@ -1,7 +1,8 @@
 """
 View 7 — Historical Trends
 
-Prometheus-backed trend view for CPU, JVM heap, and indexing rate.
+Poller-first trend view for CPU, JVM heap, and indexing rate
+with Prometheus fallback when poller history is unavailable.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from datetime import datetime
 from rich.panel import Panel
 
 from monitor.config import CPU_WARN, CPU_CRIT, console
-from monitor.metrics_service import TrendSeries, fetch_historical_trends
+from monitor.metrics_service import TrendSeries, fetch_historical_trends_with_source
 from monitor.utils import format_bytes, is_realtime_timeframe, timeframe_to_prometheus_range
 
 _BAR_CHAR = "█"
@@ -187,7 +188,7 @@ def display_trends(timeframe: str = "1h"):
     else:
         window_note = f"using --timeframe {effective_window}"
 
-    series_by_metric = fetch_historical_trends(timeframe=timeframe)
+    source, series_by_metric = fetch_historical_trends_with_source(timeframe=timeframe)
     cpu_series = series_by_metric.get("cpu", TrendSeries("CPU", [], [], "%"))
     heap_series = series_by_metric.get("heap", TrendSeries("JVM Heap", [], [], "bytes"))
     indexing_series = series_by_metric.get("indexing_rate", TrendSeries("Indexing Rate", [], [], "ops/s"))
@@ -204,9 +205,18 @@ def display_trends(timeframe: str = "1h"):
         console.print()
         return
 
+    if source == "poller":
+        source_text = "Poller JSONL (5m max buckets)"
+    elif source == "mixed":
+        source_text = "Mixed: poller JSONL + Prometheus fallback"
+    elif source == "prometheus":
+        source_text = "Prometheus (5m max_over_time buckets)"
+    else:
+        source_text = "Unavailable"
+
     # High-level summary first
     summary_text = (
-        f"  Source        : Prometheus (5m max_over_time buckets)\n"
+        f"  Source        : {source_text}\n"
         f"  Time Window   : {effective_window} ({window_note})\n"
         f"  Peak CPU      : {_format_metric_value(cpu_series, cpu_series.peak)}\n"
         f"  Peak JVM Heap : {_format_metric_value(heap_series, heap_series.peak)}\n"
