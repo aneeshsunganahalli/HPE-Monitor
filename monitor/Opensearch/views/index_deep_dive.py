@@ -7,35 +7,11 @@ index to see its shard layout.
 
 from rich.table import Table
 from rich import box
-from rich.prompt import Prompt
 from simple_term_menu import TerminalMenu
 
 from monitor.config import console
 from monitor.client import fetch_indices, fetch_shards
 from monitor.utils import format_bytes, parse_size_string
-
-
-def _prompt_index_search(index_names: list[str]) -> str | None:
-    """Prompt for an index search term with live completion when available."""
-    try:
-        from prompt_toolkit import prompt  # type: ignore[import-not-found]
-        from prompt_toolkit.completion import FuzzyWordCompleter  # type: ignore[import-not-found]
-
-        completer = FuzzyWordCompleter(index_names, WORD=True)
-        value = prompt(
-            "Index search (type to filter, Enter to apply): ",
-            completer=completer,
-            complete_while_typing=True,
-        )
-        return value.strip()
-    except (EOFError, KeyboardInterrupt):
-        return None
-    except Exception:
-        # Fallback for environments where prompt_toolkit is unavailable.
-        return Prompt.ask(
-            "[bold]Index search[/bold] [dim](partial name, blank = show all)[/dim]",
-            default="",
-        ).strip()
 
 
 def display_index_deep_dive(timeframe: str = "1h"):
@@ -49,37 +25,12 @@ def display_index_deep_dive(timeframe: str = "1h"):
         console.print("[yellow]No indices found.[/yellow]")
         return
 
-    all_index_names = [idx.get("index", "") for idx in indices if idx.get("index")]
-    search_term = _prompt_index_search(all_index_names)
-    if search_term is None:
-        return
-
-    filtered_indices = indices
-    if search_term:
-        lowered_search = search_term.lower()
-        exact_match = next(
-            (idx.get("index", "") for idx in indices if idx.get("index", "").lower() == lowered_search),
-            None,
-        )
-        if exact_match:
-            console.print(f"[green]Exact match found:[/green] [bold]{exact_match}[/bold]")
-            _display_index_shards(exact_match)
-            return
-
-        filtered_indices = [
-            idx for idx in indices
-            if lowered_search in idx.get("index", "").lower()
-        ]
-        if not filtered_indices:
-            console.print(f"[yellow]No indices matched '{search_term}'.[/yellow]")
-            return
-
     # ── Index Table ───────────────────────────────────────────
     table = Table(
         box=box.ROUNDED,
         show_header=True,
         header_style="bold cyan",
-        title="[bold]Indices (sorted by size)[/bold]",
+        title="[bold]All Indices (sorted by size)[/bold]",
         title_style="bold white",
         expand=True,
     )
@@ -92,7 +43,7 @@ def display_index_deep_dive(timeframe: str = "1h"):
     table.add_column("Replicas", width=10, justify="right")
 
     index_names = []
-    for i, idx in enumerate(filtered_indices, 1):
+    for i, idx in enumerate(indices, 1):
         name = idx.get("index", "—")
         index_names.append(name)
 
@@ -114,8 +65,6 @@ def display_index_deep_dive(timeframe: str = "1h"):
 
         table.add_row(str(i), name, size_display, doc_display, health_display, str(pri), str(rep))
 
-    if search_term:
-        console.print(f"[dim]Filter:[/dim] '{search_term}' [dim]({len(filtered_indices)} matches)[/dim]")
     console.print(table)
     console.print()
 

@@ -73,6 +73,8 @@ def display_quick_summary(timeframe: str = "1h"):
     if cluster_stats:
         cs_nodes = cluster_stats.get("nodes", {})
 
+        avg_cpu = cs_nodes.get("os", {}).get("cpu", {}).get("percent", 0)
+
         os_mem = cs_nodes.get("os", {}).get("mem", {})
         mem_used_total = os_mem.get("used_in_bytes", 0)
         mem_total_total = os_mem.get("total_in_bytes", 0)
@@ -103,10 +105,6 @@ def display_quick_summary(timeframe: str = "1h"):
             heap_max = jvm_info.get("heap_max_in_bytes", 0)
             if heap_max > 0:
                 node_heap_details.append((node_name, (heap_used / heap_max) * 100))
-
-    # Cluster CPU is most reliable when derived from per-node snapshots.
-    if node_cpu_details:
-        avg_cpu = sum(cpu_pct for _, cpu_pct in node_cpu_details) / len(node_cpu_details)
 
     node_disk_details = []
     if disk_alloc:
@@ -163,21 +161,11 @@ def display_quick_summary(timeframe: str = "1h"):
     # ── Index Activity ────────────────────────────────────────────────
     indices = fetch_indices()
 
-    # Prefer node-level counters so this view matches Node Performance output.
-    # Fall back to cluster-level counters when node stats are unavailable.
+    # Doc count, indexing ops, and search queries re-use the already-fetched cluster_stats (no extra API call)
     cs_indices = cluster_stats.get("indices", {}) if cluster_stats else {}
     total_docs = cs_indices.get("docs", {}).get("count", 0)
-    index_ops_total = 0
-    query_ops_total = 0
-
-    if node_stats and "nodes" in node_stats:
-        for node in node_stats["nodes"].values():
-            node_indices = node.get("indices", {})
-            index_ops_total += node_indices.get("indexing", {}).get("index_total", 0) or 0
-            query_ops_total += node_indices.get("search", {}).get("query_total", 0) or 0
-    else:
-        index_ops_total = cs_indices.get("indexing", {}).get("index_total", 0)
-        query_ops_total = cs_indices.get("search", {}).get("query_total", 0)
+    index_ops_total = cs_indices.get("indexing", {}).get("index_total", 0)
+    query_ops_total = cs_indices.get("search", {}).get("query_total", 0)
 
     if indices:
         total_indices = len(indices)

@@ -3,7 +3,7 @@ import math
 import re
 import time
 import urllib.parse
-from typing import Any
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from monitor.config import (
     PROMETHEUS_HOST,
@@ -25,13 +25,14 @@ from dataclasses import dataclass
 from monitor.poller_history import PollerHistoryStore
 from monitor.utils import is_realtime_timeframe, timeframe_to_minutes, timeframe_to_prometheus_range
 
+
 @dataclass
 class TrendSeries:
     """Normalized time-series payload used by historical trend views."""
 
     label: str
-    values: list[float]
-    timestamps: list[int]
+    values: List[float]
+    timestamps: List[int]
     unit: str
 
     @property
@@ -52,7 +53,7 @@ class MetricsProvider:
         self._pa_base = f"{PA_SCHEME}://{PA_HOST}:{PA_PORT}"
         self._poller_history = PollerHistoryStore(POLLER_DATA_DIR)
         self._history_source_preference = HISTORICAL_METRICS_SOURCE
-        self._warned_contexts: set[str] = set()
+        self._warned_contexts: Set[str] = set()
 
     def set_history_source_preference(self, source: str) -> None:
         """Set historical trend source preference (`auto`, `poller`, `prometheus`)."""
@@ -67,7 +68,7 @@ class MetricsProvider:
 
         Rules:
         - "real-time" -> OpenSearch _nodes/stats
-        - >1h          -> Prometheus PromQL
+        - >1h -> Prometheus PromQL
         - Historical UI views can force Prometheus regardless of timeframe.
         """
         if is_realtime_timeframe(timeframe):
@@ -76,19 +77,7 @@ class MetricsProvider:
             return "prometheus"
         return "opensearch"
 
-    @staticmethod
-    def _series_coverage_ratio(series: 'TrendSeries') -> float:
-        """Return the fraction of datapoints that are non-zero (0.0–1.0).
-
-        Used by the auto source selector to measure how much of the
-        requested window actually contains real data vs zero-filled padding.
-        """
-        if not series.values:
-            return 0.0
-        non_zero = sum(1 for v in series.values if v != 0.0)
-        return non_zero / len(series.values)
-
-    def fetch_node_stats(self, timeframe: str = "1h") -> dict[str, Any]:
+    def fetch_node_stats(self, timeframe: str = "1h") -> Dict[str, Any]:
         """
         Return a node snapshot for table views.
 
@@ -97,7 +86,6 @@ class MetricsProvider:
         """
         source = self.route_source(timeframe=timeframe)
         if source == "prometheus":
-            # Routing requirement: long windows should hit Prometheus via PromQL.
             self.fetch_prometheus_series(
                 label="CPU (5m max)",
                 query="max_over_time(opensearch_os_cpu_percent[5m])",
@@ -106,18 +94,22 @@ class MetricsProvider:
             )
         return self._fetch_node_stats_from_opensearch()
 
-    def fetch_historical_trends(self, timeframe: str) -> dict[str, TrendSeries]:
+    def fetch_historical_trends(self, timeframe: str) -> Dict[str, TrendSeries]:
         """Fetch historical trends using poller JSONL first, then Prometheus fallback."""
         _source, trends = self.fetch_historical_trends_with_source(timeframe=timeframe)
         return trends
 
-    def fetch_historical_trends_with_source(self, timeframe: str) -> tuple[str, dict[str, TrendSeries]]:
+    def fetch_historical_trends_with_source(
+        self, timeframe: str
+    ) -> Tuple[str, Dict[str, TrendSeries]]:
         """Return historical trends and the backend source used (poller/prometheus/mixed)."""
         effective_tf = "1h" if is_realtime_timeframe(timeframe) else timeframe
 
-        def _build_poller_series() -> dict[str, TrendSeries]:
+        def _build_poller_series() -> Dict[str, TrendSeries]:
             timeframe_minutes = max(timeframe_to_minutes(effective_tf), 5)
-            poller_trends = self._poller_history.fetch_historical_trends(timeframe_minutes=timeframe_minutes)
+            poller_trends = self._poller_history.fetch_historical_trends(
+                timeframe_minutes=timeframe_minutes
+            )
 
             poller_cpu_ts, poller_cpu_values = poller_trends.get("cpu", ([], []))
             poller_heap_ts, poller_heap_values = poller_trends.get("heap", ([], []))
@@ -144,7 +136,7 @@ class MetricsProvider:
                 ),
             }
 
-        def _build_prometheus_series() -> dict[str, TrendSeries]:
+        def _build_prometheus_series() -> Dict[str, TrendSeries]:
             return {
                 "cpu": self.fetch_prometheus_series(
                     label="CPU",
@@ -184,26 +176,25 @@ class MetricsProvider:
         poller_series = _build_poller_series()
         prometheus_series = _build_prometheus_series()
 
-        merged: dict[str, TrendSeries] = {}
+        merged: Dict[str, TrendSeries] = {}
         poller_used = False
         prometheus_used = False
 
         for key in ("cpu", "heap", "indexing_rate"):
-            poller_cov = self._series_coverage_ratio(poller_series[key])
-
-            # Auto mode is poller-first. If poller has no actual values, fall back to Prometheus.
-            if poller_cov > 0:
-                merged[key] = poller_series[key]
+            candidate = poller_series[key]
+            if candidate.values:
+                merged[key] = candidate
                 poller_used = True
             else:
                 merged[key] = prometheus_series[key]
-                prometheus_used = True
+                if prometheus_series[key].values:
+                    prometheus_used = True
 
         if poller_used and prometheus_used:
             source = "mixed"
         elif poller_used:
             source = "poller"
-        elif prometheus_used:
+        elif any(series.values for series in merged.values()):
             source = "prometheus"
         else:
             source = "none"
@@ -217,7 +208,7 @@ class MetricsProvider:
         timeframe: str,
         unit: str,
         step: str = "5m",
-        fallback_query: str | None = None,
+        fallback_query: Optional[str] = None,
     ) -> TrendSeries:
         """Run a Prometheus range query and collapse multiple series into one line."""
         payload, start, end, step_seconds = self._prometheus_query_range(
@@ -233,7 +224,6 @@ class MetricsProvider:
             step_seconds=step_seconds,
         )
 
-        # Preserve backwards compatibility for environments exposing alternate indexing counters.
         if fallback_query and not has_primary_samples:
             payload, start, end, step_seconds = self._prometheus_query_range(
                 query=fallback_query,
@@ -249,13 +239,13 @@ class MetricsProvider:
 
         return TrendSeries(label=label, values=values, timestamps=timestamps, unit=unit)
 
-    def fetch_performance_analyzer_metrics(self, node_name: str) -> dict[str, float | None]:
+    def fetch_performance_analyzer_metrics(self, node_name: str) -> Dict[str, Optional[float]]:
         """
         Pull bottleneck metrics from Performance Analyzer on port 9600.
 
         Returns:
-          - disk_utilization
-          - io_tot_wait
+        - disk_utilization
+        - io_tot_wait
         """
         payload, raw_text = self._request_json(
             base_url=self._pa_base,
@@ -273,20 +263,20 @@ class MetricsProvider:
             "io_tot_wait": io_wait,
         }
 
-    def _fetch_node_stats_from_opensearch(self) -> dict[str, Any]:
-        # Local import avoids module-load circular dependency with monitor.client.
+    def _fetch_node_stats_from_opensearch(self) -> Dict[str, Any]:
         from monitor.client import get_os_client
 
         client = get_os_client()
         return client.nodes.stats(metric="os,jvm,fs,indices")
 
-    def _prometheus_query_range(self, query: str, timeframe: str, step: str) -> tuple[dict[str, Any], int, int, int]:
+    def _prometheus_query_range(
+        self, query: str, timeframe: str, step: str
+    ) -> Tuple[Dict[str, Any], int, int, int]:
         minutes = max(timeframe_to_minutes(timeframe), 5)
         now = int(time.time())
         start = now - (minutes * 60)
         step_seconds = self._step_to_seconds(step)
 
-        # Keep a valid range string around for downstream logging/debugging.
         _ = timeframe_to_prometheus_range(timeframe)
 
         payload, _raw_text = self._request_json(
@@ -321,7 +311,7 @@ class MetricsProvider:
         return max(1, value * multipliers.get(unit, 60))
 
     @staticmethod
-    def _has_prometheus_samples(payload: dict[str, Any]) -> bool:
+    def _has_prometheus_samples(payload: Dict[str, Any]) -> bool:
         """Return True when Prometheus matrix results include at least one datapoint."""
         if payload.get("status") != "success":
             return False
@@ -337,11 +327,11 @@ class MetricsProvider:
 
     @staticmethod
     def _collapse_prometheus_result(
-        payload: dict[str, Any],
+        payload: Dict[str, Any],
         start: int,
         end: int,
         step_seconds: int,
-    ) -> tuple[list[int], list[float]]:
+    ) -> Tuple[List[int], List[float]]:
         """Collapse series into a max-per-timestamp line and zero-fill missing buckets."""
         if payload.get("status") != "success":
             return [], []
@@ -359,7 +349,7 @@ class MetricsProvider:
 
         expected_set = set(expected_timestamps)
 
-        by_timestamp: dict[int, list[float]] = {}
+        by_timestamp: Dict[int, List[float]] = {}
         for series in results:
             values = series.get("values", []) if isinstance(series, dict) else []
             for pair in values:
@@ -371,7 +361,6 @@ class MetricsProvider:
                     continue
                 ts = int(float(ts_raw))
 
-                # Query results can drift by a second due to evaluation timing; snap to nearest bucket.
                 if ts not in expected_set:
                     offset = round((ts - start) / max(1, step_seconds))
                     snapped = start + (offset * step_seconds)
@@ -388,10 +377,10 @@ class MetricsProvider:
         self,
         base_url: str,
         path: str,
-        params: dict[str, Any],
+        params: Dict[str, Any],
         timeout_seconds: int,
         warn_context: str,
-    ) -> tuple[dict[str, Any], str]:
+    ) -> Tuple[Dict[str, Any], str]:
         """Perform an HTTP GET and parse JSON, returning (payload, raw_text)."""
         query = urllib.parse.urlencode(params, doseq=True)
         url = f"{base_url}{path}?{query}" if query else f"{base_url}{path}"
@@ -431,12 +420,12 @@ class MetricsProvider:
 
     def _extract_metric_value(
         self,
-        payload: dict[str, Any],
+        payload: Dict[str, Any],
         raw_text: str,
         metric_name: str,
-    ) -> float | None:
+    ) -> Optional[float]:
         """Extract a numeric metric value from JSON payload, falling back to regex text parsing."""
-        candidates: list[float] = []
+        candidates: List[float] = []
         metric_key = metric_name.lower()
 
         def walk_json(obj: Any) -> None:
@@ -467,9 +456,9 @@ class MetricsProvider:
         return max(candidates)
 
 
-def _collect_numeric_values(value: Any) -> list[float]:
+def _collect_numeric_values(value: Any) -> List[float]:
     """Recursively collect numeric values from nested JSON-like structures."""
-    values: list[float] = []
+    values: List[float] = []
 
     if isinstance(value, dict):
         for nested in value.values():
@@ -487,7 +476,7 @@ def _collect_numeric_values(value: Any) -> list[float]:
     return values
 
 
-def _to_float(value: Any) -> float | None:
+def _to_float(value: Any) -> Optional[float]:
     """Safely convert a value to float; return None for non-finite or invalid numbers."""
     try:
         parsed = float(value)
@@ -506,8 +495,7 @@ def get_metrics_provider() -> MetricsProvider:
     return _METRICS_PROVIDER
 
 
-
-def fetch_historical_trends(timeframe: str) -> dict[str, TrendSeries]:
+def fetch_historical_trends(timeframe: str) -> Dict[str, TrendSeries]:
     """Fetch historical trend series for OpenSearch metrics."""
     try:
         return get_metrics_provider().fetch_historical_trends(timeframe=timeframe)
@@ -520,7 +508,9 @@ def fetch_historical_trends(timeframe: str) -> dict[str, TrendSeries]:
         }
 
 
-def fetch_historical_trends_with_source(timeframe: str) -> tuple[str, dict[str, TrendSeries]]:
+def fetch_historical_trends_with_source(
+    timeframe: str,
+) -> Tuple[str, Dict[str, TrendSeries]]:
     """Fetch historical trends and return which backend source was used."""
     try:
         return get_metrics_provider().fetch_historical_trends_with_source(timeframe=timeframe)

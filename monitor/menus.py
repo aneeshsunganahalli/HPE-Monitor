@@ -16,6 +16,9 @@ from monitor.kafka.views.resource_gauges import display_resource_gauges
 from monitor.kafka.views.consumer_lag import display_consumer_lag
 from monitor.kafka.views.throughput_ratio import display_throughput_ratio
 from monitor.kafka.views.throughput_comparison import display_throughput_comparison
+from monitor.kafka.views.topic_overview import display_topic_overview
+from monitor.kafka.views.partition_overview import display_partition_overview
+from monitor.kafka.views.broker_performance import display_broker_performance
 from monitor.Opensearch.views.quick_summary import display_quick_summary
 from monitor.Opensearch.views.trends import display_trends
 from monitor.Opensearch.views.cluster_health import display_cluster_health
@@ -83,15 +86,15 @@ def main_service_menu(timeframe: str = "1h", query: str = "*", level: str = None
 # ──────────────── OpenSearch Submenu ───────────────────────────
 
 OPENSEARCH_VIEWS = [
-    ("Quick Summary",  display_quick_summary),
+    ("Quick Summary", display_quick_summary),
     ("Historical Trends", display_trends),
     ("Cluster Health", display_cluster_health),
     ("Index Deep Dive", display_index_deep_dive),
     ("Node Performance", display_node_performance),
-    ("Shard Overview",  display_shard_overview),
-    # ("Log Browser",     display_log_browser),
+    ("Shard Overview", display_shard_overview),
+    # ("Log Browser", display_log_browser),
     # ("Root Cause Analysis", display_root_cause_analysis),
-    # ("Data Streams",    display_data_streams),
+    # ("Data Streams", display_data_streams),
 ]
 
 
@@ -146,15 +149,20 @@ def opensearch_menu(timeframe: str = "1h", query: str = "*", level: str = None, 
                 console.print(f"\n[red]Error:[/red] {e}")
             press_enter_to_return()
 
+
 # ──────────────── Kafka Submenu ───────────────────────────
 
 KAFKA_VIEWS = [
-    ("Snapshot  — All 9 Metrics",          display_snapshot),
+    ("Snapshot  — All 9 Metrics", display_snapshot),
+    ("Topic Overview", display_topic_overview),
+    ("Partition Overview", display_partition_overview),
+    ("Broker Performance", display_broker_performance),
     ("Resource Gauges  — CPU / Mem / Disk", display_resource_gauges),
-    ("Consumer Lag Graph",                  display_consumer_lag),
-    ("Throughput Ratio Graph",              display_throughput_ratio),
-    ("Produced vs Consumed",               display_throughput_comparison),
+    ("Consumer Lag Graph", display_consumer_lag),
+    ("Throughput Ratio Graph", display_throughput_ratio),
+    ("Produced vs Consumed", display_throughput_comparison),
 ]
+
 
 def kafka_menu():
     while True:
