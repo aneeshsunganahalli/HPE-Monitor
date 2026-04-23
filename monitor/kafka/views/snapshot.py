@@ -96,4 +96,3 @@ def display_snapshot(timeframe: str = "1h"):
         "[red]🔴 75–100 CRITICAL[/red]   "
         "[dim](K3, K9 inverted: 100 = healthy)[/dim]\n"
     )
-    press_enter_to_return()

@@ -106,4 +106,3 @@ def display_resource_gauges(timeframe: str = "1h"):
         "[dim]  K4 CPU and K5 Memory are Kafka-process-specific (psutil).\n"
         "  K6 Disk measures Kafka's full installation footprint vs root partition (/).[/dim]"
     )
-    press_enter_to_return()

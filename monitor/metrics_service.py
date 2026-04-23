@@ -10,6 +10,8 @@ from monitor.config import (
     PROMETHEUS_PORT,
     PROMETHEUS_SCHEME,
     PROMETHEUS_TIMEOUT_SECONDS,
+    PROMETHEUS_USER,
+    PROMETHEUS_PASS,
     PA_HOST,
     PA_PORT,
     PA_SCHEME,
@@ -47,7 +49,10 @@ class MetricsProvider:
     """Route metric requests between OpenSearch, Prometheus, and Performance Analyzer."""
 
     def __init__(self) -> None:
-        self._http = urllib3.PoolManager()
+        self._http = urllib3.PoolManager(
+            cert_reqs="CERT_NONE",
+            assert_hostname=False,
+        )
         self._prometheus_base = f"{PROMETHEUS_SCHEME}://{PROMETHEUS_HOST}:{PROMETHEUS_PORT}"
         self._pa_base = f"{PA_SCHEME}://{PA_HOST}:{PA_PORT}"
         self._poller_history = PollerHistoryStore(POLLER_DATA_DIR)
@@ -384,9 +389,18 @@ class MetricsProvider:
         url = f"{base_url}{path}?{query}" if query else f"{base_url}{path}"
 
         try:
+            headers = {}
+            if PROMETHEUS_USER and PROMETHEUS_PASS:
+                import base64
+                token = base64.b64encode(
+                    f"{PROMETHEUS_USER}:{PROMETHEUS_PASS}".encode()
+                ).decode()
+                headers["Authorization"] = f"Basic {token}"
+
             response = self._http.request(
                 "GET",
                 url,
+                headers=headers,
                 timeout=urllib3.Timeout(connect=timeout_seconds, read=timeout_seconds),
             )
         except Exception as exc:
