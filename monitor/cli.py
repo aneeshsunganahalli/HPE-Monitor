@@ -131,10 +131,10 @@ def cli(timeframe, source, watch, summary, service, query, level, spike_ts):
         label, view_fn = OPENSEARCH_VIEWS[choice]
         # Prepare watch arguments
         watch_args = {"timeframe": timeframe}
-        if label == "Log Browser":
-            watch_args.update({"query_str": query, "level": level})
-        elif label == "Root Cause Analysis":
-            watch_args = {"spike_ts": spike_ts}
+        # if label == "Log Browser":
+        #     watch_args.update({"query_str": query, "level": level})
+        # elif label == "Root Cause Analysis":
+        #     watch_args = {"spike_ts": spike_ts}
 
         _watch_loop(view_fn, watch, **watch_args)
         return

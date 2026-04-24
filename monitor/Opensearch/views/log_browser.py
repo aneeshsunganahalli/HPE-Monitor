@@ -13,7 +13,6 @@ from monitor.config import console, LOG_COLORS
 from monitor.client import search_logs
 from monitor.utils import timeframe_to_minutes
 
-
 def display_log_browser(timeframe: str = "1h", query_str: str = "*", level: str = None):
     """Render the Log Browser view."""
     now = datetime.datetime.now().strftime("%H:%M")

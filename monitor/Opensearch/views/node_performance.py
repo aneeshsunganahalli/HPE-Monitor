@@ -223,52 +223,52 @@ def display_node_performance(timeframe: str = "1h"):
     console.print()
 
     # ── Diagnostic (high-level first, drill-down second) ─────────────────────
-    critical_count = sum(1 for item in diagnostics if item["severity"] == "critical")
-    warning_count = len(diagnostics) - critical_count
+    # critical_count = sum(1 for item in diagnostics if item["severity"] == "critical")
+    # warning_count = len(diagnostics) - critical_count
 
-    if diagnostics:
-        console.print(Panel(
-            f"  {len(diagnostics)} node(s) crossed CPU/Disk thresholds in this snapshot.\n"
-            f"  Critical: {critical_count}    Warning: {warning_count}\n"
-            "  Drill-down below explains likely root cause using Performance Analyzer metrics.",
-            title="[bold]Diagnostic[/bold]",
-            title_align="left",
-            border_style="cyan",
-            expand=True,
-        ))
+    # if diagnostics:
+    #     console.print(Panel(
+    #         f"  {len(diagnostics)} node(s) crossed CPU/Disk thresholds in this snapshot.\n"
+    #         f"  Critical: {critical_count}    Warning: {warning_count}\n"
+    #         "  Drill-down below explains likely root cause using Performance Analyzer metrics.",
+    #         title="[bold]Diagnostic[/bold]",
+    #         title_align="left",
+    #         border_style="cyan",
+    #         expand=True,
+    #     ))
 
-        diag_table = Table(
-            box=box.SIMPLE,
-            show_header=True,
-            header_style="bold cyan",
-            expand=True,
-        )
-        diag_table.add_column("Node", style="bold white", ratio=1)
-        diag_table.add_column("Pressure", width=10, justify="center")
-        diag_table.add_column("PA Signals", width=34)
-        diag_table.add_column("Plain English Diagnosis", ratio=3)
+    #     diag_table = Table(
+    #         box=box.SIMPLE,
+    #         show_header=True,
+    #         header_style="bold cyan",
+    #         expand=True,
+    #     )
+    #     diag_table.add_column("Node", style="bold white", ratio=1)
+    #     diag_table.add_column("Pressure", width=10, justify="center")
+    #     diag_table.add_column("PA Signals", width=34)
+    #     diag_table.add_column("Plain English Diagnosis", ratio=3)
 
-        for item in diagnostics:
-            pressure = "[red]critical[/red]" if item["severity"] == "critical" else "[yellow]warning[/yellow]"
-            signals = (
-                f"Disk_Utilization={_format_signal(item['disk_util'])}  "
-                f"IO_TotWait={_format_signal(item['io_wait'], unit=None)}"
-            )
-            diag_table.add_row(
-                str(item["node"]),
-                pressure,
-                signals,
-                str(item["explanation"]),
-            )
+    #     for item in diagnostics:
+    #         pressure = "[red]critical[/red]" if item["severity"] == "critical" else "[yellow]warning[/yellow]"
+    #         signals = (
+    #             f"Disk_Utilization={_format_signal(item['disk_util'])}  "
+    #             f"IO_TotWait={_format_signal(item['io_wait'], unit=None)}"
+    #         )
+    #         diag_table.add_row(
+    #             str(item["node"]),
+    #             pressure,
+    #             signals,
+    #             str(item["explanation"]),
+    #         )
 
-        console.print(diag_table)
-    else:
-        console.print(Panel(
-            "  [green]No CPU or disk bottlenecks detected. Performance Analyzer drill-down is not required.[/green]",
-            title="[bold]Diagnostic[/bold]",
-            title_align="left",
-            border_style="green",
-            expand=True,
-        ))
+    #     console.print(diag_table)
+    # else:
+    #     console.print(Panel(
+    #         "  [green]No CPU or disk bottlenecks detected. Performance Analyzer drill-down is not required.[/green]",
+    #         title="[bold]Diagnostic[/bold]",
+    #         title_align="left",
+    #         border_style="green",
+    #         expand=True,
+    #     ))
 
     console.print()

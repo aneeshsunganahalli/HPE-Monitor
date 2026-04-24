@@ -81,6 +81,18 @@ class MetricsProvider:
             return "prometheus"
         return "opensearch"
 
+    @staticmethod
+    def _series_coverage_ratio(series: 'TrendSeries') -> float:
+        """Return the fraction of datapoints that are non-zero (0.0–1.0).
+
+        Used by the auto source selector to measure how much of the
+        requested window actually contains real data vs zero-filled padding.
+        """
+        if not series.values:
+            return 0.0
+        non_zero = sum(1 for v in series.values if v != 0.0)
+        return non_zero / len(series.values)
+
     def fetch_node_stats(self, timeframe: str = "1h") -> dict[str, Any]:
         """
         Return a node snapshot for table views.
@@ -182,20 +194,21 @@ class MetricsProvider:
         prometheus_used = False
 
         for key in ("cpu", "heap", "indexing_rate"):
-            candidate = poller_series[key]
-            if candidate.values:
-                merged[key] = candidate
+            poller_cov = self._series_coverage_ratio(poller_series[key])
+
+            # Auto mode is poller-first. If poller has no actual values, fall back to Prometheus.
+            if poller_cov > 0:
+                merged[key] = poller_series[key]
                 poller_used = True
             else:
                 merged[key] = prometheus_series[key]
-                if prometheus_series[key].values:
-                    prometheus_used = True
+                prometheus_used = True
 
         if poller_used and prometheus_used:
             source = "mixed"
         elif poller_used:
             source = "poller"
-        elif any(series.values for series in merged.values()):
+        elif prometheus_used:
             source = "prometheus"
         else:
             source = "none"

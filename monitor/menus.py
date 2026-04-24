@@ -24,9 +24,9 @@ from monitor.Opensearch.views.cluster_health import display_cluster_health
 from monitor.Opensearch.views.index_deep_dive import display_index_deep_dive
 from monitor.Opensearch.views.node_performance import display_node_performance
 from monitor.Opensearch.views.shard_overview import display_shard_overview
-from monitor.Opensearch.views.data_streams import display_data_streams
-from monitor.Opensearch.views.log_browser import display_log_browser
-from monitor.Opensearch.views.root_cause import display_root_cause_analysis
+# from monitor.Opensearch.views.data_streams import display_data_streams
+# from monitor.Opensearch.views.log_browser import display_log_browser
+# from monitor.Opensearch.views.root_cause import display_root_cause_analysis
 from monitor.utils import press_enter_to_return
 
 
@@ -91,9 +91,9 @@ OPENSEARCH_VIEWS = [
     ("Index Deep Dive", display_index_deep_dive),
     ("Node Performance", display_node_performance),
     ("Shard Overview",  display_shard_overview),
-    ("Log Browser",     display_log_browser),
-    ("Root Cause Analysis", display_root_cause_analysis),
-    ("Data Streams",    display_data_streams),
+    # ("Log Browser",     display_log_browser),
+    # ("Root Cause Analysis", display_root_cause_analysis),
+    # ("Data Streams",    display_data_streams),
 ]
 
 
@@ -137,12 +137,13 @@ def opensearch_menu(timeframe: str = "1h", query: str = "*", level: str = None, 
             console.clear()
             try:
                 # Pass extra context to specific views
-                if label == "Log Browser":
-                    view_fn(timeframe=timeframe, query_str=query, level=level)
-                elif label == "Root Cause Analysis":
-                    view_fn(spike_ts=spike_ts)
-                else:
-                    view_fn(timeframe=timeframe)
+                # if label == "Log Browser":
+                #     view_fn(timeframe=timeframe, query_str=query, level=level)
+                # elif label == "Root Cause Analysis":
+                #     view_fn(spike_ts=spike_ts)
+                # else:
+                #     view_fn(timeframe=timeframe)
+                view_fn(timeframe=timeframe)
             except Exception as e:
                 console.print(f"\n[red]Error:[/red] {e}")
             press_enter_to_return()
