@@ -176,17 +176,17 @@ def kafka_menu() -> None:
         console.clear()
         console.print()
         console.print(Panel.fit(
-            "[bold yellow]Kafka Monitor[/bold yellow]\n"
+            "[bold cyan]Kafka Monitor[/bold cyan]\n"
             "[dim]Use arrow keys, Enter to select[/dim]",
-            border_style="yellow",
+            border_style="cyan",
         ))
         console.print()
 
         menu = TerminalMenu(
             options,
             menu_cursor=MENU_CURSOR,
-            menu_cursor_style=("fg_yellow", "bold"),
-            menu_highlight_style=("fg_yellow", "bold"),
+            menu_cursor_style=MENU_CURSOR_STYLE,
+            menu_highlight_style=MENU_HIGHLIGHT_STYLE,
         )
         choice = menu.show()
 

@@ -155,7 +155,7 @@ def _colorize_line(raw: str, keyword: str = "") -> Text:
                     t.append(msg[pos:], style=color)
                     break
                 t.append(msg[pos:idx], style=color)
-                t.append(msg[idx:idx + len(keyword)], style="bold white on dark_orange")
+                t.append(msg[idx:idx + len(keyword)], style="bold white on dark_cyan")
                 pos = idx + len(keyword)
         else:
             t.append(msg, style=color)
@@ -176,16 +176,16 @@ def _browse_file(path: pathlib.Path, level_filter: str, n_lines: int, keyword: s
     """Display the tail of a single log file with filtering applied."""
     console.print()
     console.rule(
-        f"[bold yellow]Kafka Log — {path.name}  "
+        f"[bold cyan]Kafka Log — {path.name}  "
         f"[dim](last {n_lines} lines | filter={level_filter}"
-        f"{f' | search={keyword}' if keyword else ''})[/dim][/bold yellow]"
+        f"{f' | search={keyword}' if keyword else ''})[/dim][/bold cyan]"
     )
     console.print()
 
     raw_lines = _tail(path, n_lines * 10)   # fetch extra to survive filtering
     if not raw_lines:
         console.print(Panel("[yellow]File is empty or unreadable.[/yellow]",
-                            border_style="yellow", expand=False))
+                            border_style="cyan", expand=False))
         press_enter_to_return()
         return
 
@@ -208,7 +208,7 @@ def _browse_file(path: pathlib.Path, level_filter: str, n_lines: int, keyword: s
         console.print(Panel(
             f"[yellow]No lines matching filter=[bold]{level_filter}[/bold]"
             f"{f' keyword=[bold]{keyword}[/bold]' if keyword else ''}[/yellow]",
-            border_style="yellow", expand=False,
+            border_style="cyan", expand=False,
         ))
         press_enter_to_return()
         return
@@ -254,8 +254,8 @@ def _settings_menu() -> tuple[str, int, str]:
     menu   = TerminalMenu(
         level_choices,
         menu_cursor="❯ ",
-        menu_cursor_style=("fg_yellow", "bold"),
-        menu_highlight_style=("fg_yellow", "bold"),
+        menu_cursor_style=("fg_cyan", "bold"),
+        menu_highlight_style=("fg_cyan", "bold"),
     )
     choice = menu.show()
     level  = level_map.get(choice if choice is not None else 0, "TRACE")
@@ -268,8 +268,8 @@ def _settings_menu() -> tuple[str, int, str]:
     menu   = TerminalMenu(
         line_choices,
         menu_cursor="❯ ",
-        menu_cursor_style=("fg_yellow", "bold"),
-        menu_highlight_style=("fg_yellow", "bold"),
+        menu_cursor_style=("fg_cyan", "bold"),
+        menu_highlight_style=("fg_cyan", "bold"),
     )
     choice  = menu.show()
     n_lines = line_map.get(choice if choice is not None else 1, 40)
@@ -293,7 +293,7 @@ def display_kafka_log_browser() -> None:
     """Main entry point for the Kafka Log Browser view."""
     while True:
         console.print()
-        console.rule("[bold yellow]Kafka — Log Browser[/bold yellow]")
+        console.rule("[bold cyan]Kafka — Log Browser[/bold cyan]")
         console.print()
 
         logs = _available_logs()
@@ -302,7 +302,7 @@ def display_kafka_log_browser() -> None:
                 f"[yellow]No log files found in:[/yellow]\n"
                 f"[bold]{KAFKA_LOG_DIR}[/bold]\n\n"
                 "[dim]Check that KAFKA_LOG_DIR is correct in config.[/dim]",
-                border_style="yellow", expand=False,
+                border_style="cyan", expand=False,
             ))
             press_enter_to_return()
             return
@@ -322,8 +322,8 @@ def display_kafka_log_browser() -> None:
         menu   = TerminalMenu(
             entries,
             menu_cursor="❯ ",
-            menu_cursor_style=("fg_yellow", "bold"),
-            menu_highlight_style=("fg_yellow", "bold"),
+            menu_cursor_style=("fg_cyan", "bold"),
+            menu_highlight_style=("fg_cyan", "bold"),
         )
         choice = menu.show()
 
@@ -339,8 +339,8 @@ def display_kafka_log_browser() -> None:
             menu2  = TerminalMenu(
                 entries[:-2],  # only file entries
                 menu_cursor="❯ ",
-                menu_cursor_style=("fg_yellow", "bold"),
-                menu_highlight_style=("fg_yellow", "bold"),
+                menu_cursor_style=("fg_cyan", "bold"),
+                menu_highlight_style=("fg_cyan", "bold"),
             )
             choice2 = menu2.show()
             if choice2 is not None and choice2 < len(logs):

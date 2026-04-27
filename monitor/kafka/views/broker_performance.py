@@ -120,15 +120,15 @@ def _status_str(value, warn: float, crit: float, unit: str = "%") -> str:
 def display_broker_performance(timeframe: str = "1h") -> None:
     """Render the Kafka Broker Performance view."""
     console.print()
-    console.rule("[bold yellow]Kafka — Broker Performance[/bold yellow]")
+    console.rule("[bold cyan]Kafka — Broker Performance[/bold cyan]")
     console.print()
 
     console.print("[dim]Collecting resource metrics (may take ~1 second for CPU sampling)…[/dim]")
     k4 = collect_k4()
     k5 = collect_k5()
     k6 = collect_k6()
-    broker_infos  = _fetch_broker_info()
-    broker_count  = _fetch_broker_count()
+    broker_infos = _fetch_broker_info()
+    broker_count = _fetch_broker_count()
     console.print()
 
     # ── Broker identity panel ─────────────────────────────────────────────────
@@ -145,12 +145,12 @@ def display_broker_performance(timeframe: str = "1h") -> None:
             "  " + "   ".join(id_parts) + "   " + broker_label,
             title="[bold]Broker Identity[/bold]",
             title_align="left",
-            border_style="yellow",
+            border_style="cyan",
             expand=False,
         ))
     else:
         no_info = "[dim]Broker identity unavailable from Prometheus.[/dim]"
-        bcount  = (
+        bcount = (
             f"[green]{broker_count} broker(s) reported active[/green]"
             if broker_count > 0 else "[red]No brokers detected[/red]"
         )
@@ -158,14 +158,14 @@ def display_broker_performance(timeframe: str = "1h") -> None:
             f"  {no_info}   {bcount}",
             title="[bold]Broker Identity[/bold]",
             title_align="left",
-            border_style="yellow",
+            border_style="cyan",
             expand=False,
         ))
     console.print()
 
     # ── Resource metrics table ────────────────────────────────────────────────
-    cpu_pct    = k4.get("cpu_pct")
-    mem_pct    = k5.get("rss_pct")
+    cpu_pct = k4.get("cpu_pct")
+    mem_pct = k5.get("rss_pct")
     disk_pct   = k6.get("kafka_pct")
     rss_mb     = k5.get("rss_mb")
     kafka_gb   = k6.get("kafka_gb")
@@ -177,7 +177,7 @@ def display_broker_performance(timeframe: str = "1h") -> None:
     table = Table(
         box=box.ROUNDED,
         show_header=True,
-        header_style="bold yellow",
+        header_style="bold cyan",
         expand=True,
     )
     table.add_column("Metric",     style="bold white", ratio=1)
@@ -260,7 +260,7 @@ def display_broker_performance(timeframe: str = "1h") -> None:
             breakdown,
             title="[bold]Disk Breakdown — Kafka Installation[/bold]",
             title_align="left",
-            border_style="yellow",
+            border_style="cyan",
             expand=True,
         ))
         console.print()
@@ -290,7 +290,7 @@ def display_broker_performance(timeframe: str = "1h") -> None:
             console.print(f"  {issue}")
         console.print()
         diag_text = _plain_english_diagnostic(cpu_pct, mem_pct, disk_pct)
-        border = "red" if any("✗" in i for i in issues) else "yellow"
+        border = "red" if any("✗" in i for i in issues) else "cyan"
         console.print(Panel(
             f"  {diag_text}",
             title="[bold]Diagnosis[/bold]",

@@ -174,7 +174,7 @@ def _lag_ratio_str(ratio: float, lag_msgs: int) -> str:
 def display_partition_overview(timeframe: str = "1h") -> None:
     """Render the Kafka Partition Overview view."""
     console.print()
-    console.rule("[bold yellow]Kafka -- Partition Overview[/bold yellow]")
+    console.rule("[bold cyan]Kafka -- Partition Overview[/bold cyan]")
     console.print()
 
     topics = _collect_partition_data()
@@ -203,7 +203,7 @@ def display_partition_overview(timeframe: str = "1h") -> None:
             f"[dim]({total_partitions} partitions across {len(topics)} topic(s))[/dim]"
         ),
         title_align="left",
-        border_style="yellow",
+        border_style="cyan",
         expand=False,
     ))
     console.print()
@@ -216,8 +216,8 @@ def display_partition_overview(timeframe: str = "1h") -> None:
         topic_has_nl  = any(p["health"] == "NO-LEADER" for p in partitions)
         topic_healthy = all(p["health"] == "HEALTHY" for p in partitions)
 
-        border_style = "red" if (topic_has_ur or topic_has_nl) else ("yellow" if not topic_healthy else None)
-        header_style = "bold red" if (topic_has_ur or topic_has_nl) else "bold yellow"
+        border_style = "red" if (topic_has_ur or topic_has_nl) else ("cyan" if not topic_healthy else None)
+        header_style = "bold red" if (topic_has_ur or topic_has_nl) else "bold cyan"
         title_style  = "bold red" if (topic_has_ur or topic_has_nl) else "bold white"
 
         table = Table(
@@ -316,9 +316,9 @@ def display_partition_overview(timeframe: str = "1h") -> None:
                 "  Consumer lag ratio is high on one or more partitions.\n"
                 "  This means the consumer is significantly behind on stored messages.\n"
                 "  Check Logstash pipeline health or increase consumer throughput.",
-                title="[bold yellow]Consumer Pressure Warning[/bold yellow]",
+                title="[bold cyan]Consumer Pressure Warning[/bold cyan]",
                 title_align="left",
-                border_style="yellow",
+                border_style="cyan",
                 expand=False,
             ))
     else:

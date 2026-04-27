@@ -49,10 +49,11 @@ class MetricsProvider:
     """Route metric requests between OpenSearch, Prometheus, and Performance Analyzer."""
 
     def __init__(self) -> None:
-        self._http = urllib3.PoolManager(
-            cert_reqs="CERT_NONE",
-            assert_hostname=False,
-        )
+        pool_kwargs: dict[str, Any] = {"cert_reqs": "CERT_NONE"}
+        if PROMETHEUS_SCHEME == "https":
+            pool_kwargs["assert_hostname"] = False
+
+        self._http = urllib3.PoolManager(**pool_kwargs)
         self._prometheus_base = f"{PROMETHEUS_SCHEME}://{PROMETHEUS_HOST}:{PROMETHEUS_PORT}"
         self._pa_base = f"{PA_SCHEME}://{PA_HOST}:{PA_PORT}"
         self._poller_history = PollerHistoryStore(POLLER_DATA_DIR)

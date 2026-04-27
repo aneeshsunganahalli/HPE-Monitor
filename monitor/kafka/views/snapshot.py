@@ -37,17 +37,18 @@ def _key_value_str(key, m):
     return "—"
 
 def display_snapshot(timeframe: str = "1h"):
-    snap = collect_all()
     """Print the full 9-metric Kafka snapshot table."""
+    snap = collect_all()
     ts = snap.get("timestamp", "—")[:19].replace("T", " ")
     console.rule(
-        f"[bold yellow]📊 Kafka Metrics Snapshot  [dim]{ts}[/dim][/bold yellow]"
+        f"[bold cyan]📊 Kafka Metrics Snapshot  [dim]{ts}[/dim][/bold cyan]"
     )
 
     table = Table(
         box=box.ROUNDED,
-        header_style="bold white on dark_blue",
-        expand=True, padding=(0, 1),
+        header_style="bold cyan",
+        expand=True,
+        padding=(0, 1),
     )
     table.add_column("Group",      style="bold",    width=11)
     table.add_column("Metric",                      width=30)

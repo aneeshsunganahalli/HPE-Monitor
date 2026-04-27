@@ -319,8 +319,8 @@ def _graph_consumer_lag(topic: str, minutes: int = 30) -> None:
 
     console.print()
     console.rule(
-        f"[bold yellow]📈 Consumer Lag — {topic} "
-        f"[dim](last {minutes} min)[/dim][/bold yellow]"
+        f"[bold cyan]📈 Consumer Lag — {topic} "
+        f"[dim](last {minutes} min)[/dim][/bold cyan]"
     )
     console.print()
 
@@ -328,7 +328,7 @@ def _graph_consumer_lag(topic: str, minutes: int = 30) -> None:
         console.print(Panel(
             "[yellow]No lag data from Prometheus for this topic.[/yellow]\n"
             "[dim]kafka_exporter may not be scraping this consumer group.[/dim]",
-            border_style="yellow", expand=False,
+            border_style="cyan", expand=False,
         ))
         press_enter_to_return()
         return
@@ -412,15 +412,15 @@ def _graph_throughput(topic: str, minutes: int = 30) -> None:
 
     console.print()
     console.rule(
-        f"[bold yellow]📊 Produced vs Consumed — {topic} "
-        f"[dim](last {minutes} min)[/dim][/bold yellow]"
+        f"[bold cyan]📊 Produced vs Consumed — {topic} "
+        f"[dim](last {minutes} min)[/dim][/bold cyan]"
     )
     console.print()
 
     if not s_prod and not s_cons:
         console.print(Panel(
             "[yellow]No throughput data from Prometheus for this topic.[/yellow]",
-            border_style="yellow", expand=False,
+            border_style="cyan", expand=False,
         ))
         press_enter_to_return()
         return
@@ -445,10 +445,10 @@ def _graph_throughput(topic: str, minutes: int = 30) -> None:
         return spark, vals[-1], mn_, mx_, avg
 
     if s_prod:
-        sp, lat, mn_, mx_, av = _sparkline(s_prod, "yellow")
+        sp, lat, mn_, mx_, av = _sparkline(s_prod, "cyan")
         console.print(
-            f"  [yellow]{'Produced (K7)':<22}[/yellow]  "
-            f"latest=[yellow]{lat:.4f}[/yellow] msg/s  "
+            f"  [cyan]{'Produced (K7)':<22}[/cyan]  "
+            f"latest=[cyan]{lat:.4f}[/cyan] msg/s  "
             f"[dim]avg={av:.4f}  max={mx_:.4f}[/dim]"
         )
         console.print(f"  {'':22}  {sp}")
@@ -483,15 +483,15 @@ def _graph_throughput(topic: str, minutes: int = 30) -> None:
 
 def _display_retention(topic: str) -> None:
     console.print()
-    console.rule(f"[bold yellow]🗄  Retention Policy — {topic}[/bold yellow]")
+    console.rule(f"[bold cyan]🗄  Retention Policy — {topic}[/bold cyan]")
     console.print()
 
     cfg = _fetch_retention(topic)
 
     policy       = cfg["policy"]
-    policy_color = "cyan" if policy == "compact" else "yellow"
+    policy_color = "cyan"
     ret_color    = "green" if cfg["retention_ms"] > 0 else "dim"
-    size_color   = "green" if cfg["retention_bytes"] < 0 else "yellow"
+    size_color   = "green" if cfg["retention_bytes"] < 0 else "cyan"
 
     table = Table(box=box.SIMPLE, show_header=False, expand=False, padding=(0, 2))
     table.add_column("Key",   style="bold dim",  width=26)
@@ -527,38 +527,50 @@ def _display_retention(topic: str) -> None:
 # Partition table drill-down
 # ---------------------------------------------------------------------------
 
-def _display_topic_drill(topic: str) -> None:
+def _display_partition_detail(topic: str, timeframe: str) -> None:
+    """Drill-down table for a single topic's partitions."""
     console.print()
-    console.rule(f"[bold yellow]Partition Detail — {topic}[/bold yellow]")
+    console.rule(f"[bold cyan]Partition Detail for {topic}[/bold cyan]")
     console.print()
 
-    rows = _collect_partition_detail(topic)
-    if not rows:
-        console.print(f"[yellow]No partition data found for '{topic}'.[/yellow]")
+    partitions = _collect_partition_detail(topic)
+
+    if not partitions:
+        console.print(f"[yellow]No partition data for topic '{topic}'.[/yellow]")
+        press_enter_to_return()
         return
 
-    table = Table(box=box.ROUNDED, show_header=True, header_style="bold yellow", expand=True)
-    table.add_column("Partition",           width=10, justify="center")
-    table.add_column("Leader",              width=8,  justify="center")
-    table.add_column("ISR",                 width=6,  justify="center")
-    table.add_column("Under-Rep",           width=11, justify="center")
-    table.add_column("Latest Offset (LEO)", width=18, justify="right")
-    table.add_column("Consumer Offset",     width=16, justify="right")
-    table.add_column("Oldest Offset",       width=14, justify="right")
-    table.add_column("Retention",           width=12, justify="right")
-    table.add_column("Consumer Lag",        width=14, justify="right")
-    table.add_column("Produce Rate",        width=16, justify="right")
-    table.add_column("Consume Rate",        width=16, justify="right")
+    table = Table(
+        box=box.ROUNDED,
+        show_header=True,
+        header_style="bold cyan",
+        expand=True,
+        title=f"[bold]Partitions for {topic}[/bold]",
+        title_align="left",
+        border_style="cyan",
+    )
+    table.add_column("Partition",   style="white", width=10, justify="center")
+    table.add_column("Leader",      width=8,  justify="center")
+    table.add_column("ISR",         width=6,  justify="center")
+    table.add_column("Under-Rep",   width=11, justify="center")
+    table.add_column("Latest / LEO",width=18, justify="right")
+    table.add_column("Oldest",      width=18, justify="right")
+    table.add_column("Retention",   width=18, justify="right")
+    table.add_column("Consumer Lag",width=14, justify="right")
+    table.add_column("Produce Rate",width=15, justify="right")
+    table.add_column("Consume Rate",width=15, justify="right")
 
-    for p in rows:
+    for p in partitions:
         lc      = _lag_color(p["lag"])
-        ur_str  = f"[red]{p['under_rep']}[/red]"  if p["under_rep"] > 0 else "[green]0[/green]"
-        isr_str = str(p["isr"])    if p["isr"]    >= 0 else "[dim]--[/dim]"
-        ld_str  = str(p["leader"]) if p["leader"] >= 0 else "[dim]--[/dim]"
+        ur_str  = f"[red]{p['under_rep']}[/red]" if p["under_rep"] > 0 else "[green]0[/green]"
+        isr_str = f"[red]{p['isr']}[/red]" if p["isr"] < 0 else str(p["isr"])
+        ld_str  = f"[red]{p['leader']}[/red]" if p["leader"] < 0 else str(p["leader"])
         table.add_row(
-            p["partition"], ld_str, isr_str, ur_str,
+            p["partition"],
+            ld_str,
+            isr_str,
+            ur_str,
             f"{p['cur_offset']:,}",
-            f"{p['cons_offset']:,}",
             f"{p['old_offset']:,}",
             f"{p['retention']:,}",
             f"[{lc}]{p['lag']:,}[/{lc}]",
@@ -567,124 +579,160 @@ def _display_topic_drill(topic: str) -> None:
         )
 
     console.print(table)
-    console.print()
+    press_enter_to_return()
 
 
 # ---------------------------------------------------------------------------
 # Drill-down sub-menu
 # ---------------------------------------------------------------------------
 
-def _topic_submenu(topic: str) -> None:
-    """Sub-menu shown after selecting a topic — table + graphs + retention."""
+def _topic_detail_submenu(topic: str):
+    """Show per-topic drill-down options (partitions, graphs, retention)."""
     while True:
+        console.clear()
+        console.rule(f"[bold cyan]Topic: {topic}[/bold cyan]")
         console.print()
-        console.rule(f"[bold yellow]{topic}[/bold yellow]")
-        console.print(
-            "  [dim]Select a view for this topic:[/dim]\n"
-        )
 
-        options = [
-            "Partition Table",
-            "Consumer Lag Graph",
-            "Produced vs Consumed Graph",
-            "Retention Policy",
-            "Back",
+        # Per-partition table
+        part_rows = _collect_partition_detail(topic)
+        table = Table(
+            box=box.ROUNDED,
+            header_style="bold cyan",
+            expand=True,
+        )
+        table.add_column("Part",     style="bold cyan", justify="right")
+        table.add_column("Leader",   justify="right")
+        table.add_column("ISR",      justify="right")
+        table.add_column("UR",       justify="right")
+        table.add_column("Current",  justify="right")
+        table.add_column("Consumed", justify="right")
+        table.add_column("Oldest",   justify="right")
+        table.add_column("Retained", justify="right")
+        table.add_column("Lag",      justify="right")
+        table.add_column("Prod Rate", justify="right")
+        table.add_column("Cons Rate", justify="right")
+
+        for row in part_rows:
+            lag_val = row['lag']
+            ur_val  = row['under_rep']
+            table.add_row(
+                row["partition"],
+                str(row["leader"]),
+                str(row["isr"]),
+                f"[red]{ur_val}[/red]" if ur_val > 0 else "[dim]0[/dim]",
+                f"{row['cur_offset']:,}",
+                f"{row['cons_offset']:,}",
+                f"{row['old_offset']:,}",
+                f"{row['retention']:,}",
+                f"[{_lag_color(lag_val)}]{lag_val:,}[/]",
+                _rate_str(row["prod_rate"]),
+                _rate_str(row["cons_rate"]),
+            )
+        console.print(table)
+        console.print()
+
+        # Submenu
+        console.print(Panel(
+            "Select an action for this topic.",
+            title="[bold]Actions[/bold]",
+            title_align="left",
+            border_style="cyan",
+            expand=False,
+        ))
+        console.print()
+
+        menu_options = [
+            "Graph Consumer Lag",
+            "Graph Throughput (Produced vs Consumed)",
+            "View Retention Policy",
+            "---",
+            "Back to Topic List",
         ]
-        menu   = TerminalMenu(
-            options,
+        menu = TerminalMenu(
+            menu_options,
             menu_cursor="❯ ",
-            menu_cursor_style=("fg_yellow", "bold"),
-            menu_highlight_style=("fg_yellow", "bold"),
+            menu_cursor_style=("fg_cyan", "bold"),
+            menu_highlight_style=("fg_cyan", "bold"),
         )
         choice = menu.show()
 
         if choice is None or choice == 4:
             return
-        elif choice == 0:
-            _display_topic_drill(topic)
+        if choice == 0:
+            _graph_consumer_lag(topic)
         elif choice == 1:
-            _graph_consumer_lag(topic, minutes=30)
+            _graph_throughput(topic)
         elif choice == 2:
-            _graph_throughput(topic, minutes=30)
-        elif choice == 3:
             _display_retention(topic)
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
+def display_topic_deep_dive(timeframe: str = "1h"):
+    """Main function to drive the Topic Deep Dive view."""
+    while True:
+        console.clear()
+        console.rule("[bold cyan]Kafka — Topic Deep Dive[/bold cyan]")
+        console.print()
 
-def display_topic_deep_dive(timeframe: str = "1h") -> None:
-    """Render the Kafka Topic Deep Dive view."""
-    console.print()
-    console.rule("[bold yellow]Kafka — Topic Deep Dive[/bold yellow]")
-    console.print()
+        summary_rows = _collect_topic_summary()
+        if not summary_rows:
+            console.print("[yellow]No user topics found in Prometheus.[/yellow]")
+            press_enter_to_return()
+            return
 
-    topics = _collect_topic_summary()
-
-    if not topics:
-        console.print("[yellow]No topic data returned from Prometheus.[/yellow]")
-        console.print("[dim]Check that kafka_exporter is running and reachable.[/dim]")
-        press_enter_to_return()
-        return
-
-    table = Table(
-        box=box.ROUNDED,
-        show_header=True,
-        header_style="bold yellow",
-        title="[bold]Topics[/bold]  [dim](internal topics excluded)[/dim]",
-        title_style="bold white",
-        expand=True,
-    )
-    table.add_column("#",                        style="dim", width=4,  justify="right")
-    table.add_column("Topic",                    style="white", ratio=2)
-    table.add_column("Parts",                    width=7,  justify="center")
-    table.add_column("Latest Offset / LEO (Σ)", width=22, justify="right")
-    table.add_column("Consumer Offset (Σ)",      width=20, justify="right")
-    table.add_column("Retention Depth (Σ)",      width=20, justify="right")
-    table.add_column("Consumer Lag",             width=14, justify="right")
-    table.add_column("Produce Rate",             width=15, justify="right")
-    table.add_column("Consume Rate",             width=15, justify="right")
-    table.add_column("Under-Rep",                width=11, justify="center")
-
-    topic_names: list[str] = []
-    for i, t in enumerate(topics, 1):
-        topic_names.append(t["topic"])
-        lc     = _lag_color(t["lag"])
-        ur_str = f"[red]{t['under_rep']}[/red]" if t["under_rep"] > 0 else "[green]0[/green]"
-        table.add_row(
-            str(i),
-            t["topic"],
-            str(t["partitions"]),
-            f"{t['cur_offset']:,}",
-            f"{t['cons_offset']:,}",
-            f"{t['retention']:,}",
-            f"[{lc}]{t['lag']:,}[/{lc}]",
-            _rate_str(t["prod_rate"]),
-            _rate_str(t["cons_rate"]),
-            ur_str,
+        # ── Summary Table ─────────────────────────────────────────────────────
+        table = Table(
+            box=box.ROUNDED,
+            header_style="bold cyan",
+            expand=True,
         )
+        table.add_column("Topic",           style="bold cyan", ratio=3)
+        table.add_column("Partitions",      justify="right", width=12)
+        table.add_column("Total Msgs",      justify="right", width=14)
+        table.add_column("Retention Depth", justify="right", width=17)
+        table.add_column("Consumer Lag",    justify="right", width=14)
+        table.add_column("Produce Rate",    justify="right", width=18)
+        table.add_column("Consume Rate",    justify="right", width=18)
+        table.add_column("UR",              justify="right", width=6)
 
-    console.print(table)
-    console.print()
-    console.print(
-        "  [dim]Latest Offset (LEO), Consumer Offset, and Retention Depth are "
-        "sums across all partitions of each topic.[/dim]"
-    )
-    console.print()
-    console.print("[dim]Select a topic to inspect:[/dim]")
-    console.print()
+        for row in summary_rows:
+            lag_val = row['lag']
+            ur_val  = row['under_rep']
+            table.add_row(
+                row["topic"],
+                str(row["partitions"]),
+                f"{row['cur_offset']:,}",
+                f"{row['retention']:,}",
+                f"[{_lag_color(lag_val)}]{lag_val:,}[/]",
+                _rate_str(row["prod_rate"]),
+                _rate_str(row["cons_rate"]),
+                f"[red]{ur_val}[/red]" if ur_val > 0 else "[dim]0[/dim]",
+            )
+        console.print(table)
+        console.print()
 
-    drill_options = topic_names + ["Back"]
-    menu   = TerminalMenu(
-        drill_options,
-        menu_cursor="❯ ",
-        menu_cursor_style=("fg_yellow", "bold"),
-        menu_highlight_style=("fg_yellow", "bold"),
-    )
-    choice = menu.show()
+        # ── Topic Selection Menu ──────────────────────────────────────────────
+        console.print(Panel(
+            "Select a topic to see per-partition details, graphs, and retention policy.",
+            title="[bold]Drill Down[/bold]",
+            title_align="left",
+            border_style="cyan",
+            expand=False,
+        ))
+        console.print()
 
-    if choice is None or choice == len(topic_names):
-        return
+        menu_options = [r["topic"] for r in summary_rows] + ["---", "Back"]
+        menu = TerminalMenu(
+            menu_options,
+            menu_cursor="❯ ",
+            menu_cursor_style=("fg_cyan", "bold"),
+            menu_highlight_style=("fg_cyan", "bold"),
+        )
+        choice_idx = menu.show()
 
-    _topic_submenu(drill_options[choice])
+        if choice_idx is None or menu_options[choice_idx] == "Back":
+            return
+        if menu_options[choice_idx] == "---":
+            continue
+
+        selected_topic = menu_options[choice_idx]
+        _topic_detail_submenu(selected_topic)
